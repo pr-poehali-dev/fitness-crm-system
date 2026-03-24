@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '@/store';
 import Layout from '@/components/Layout';
 import SellModal from '@/components/SellModal';
+import InquiryModal from '@/components/InquiryModal';
 import Dashboard from '@/pages/Dashboard';
 import Clients from '@/pages/Clients';
 import Schedule from '@/pages/Schedule';
@@ -16,6 +17,7 @@ export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [showSell, setShowSell] = useState(false);
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
+  const [showInquiry, setShowInquiry] = useState(false);
 
   const handleSell = (clientId?: string) => {
     setSellClientId(clientId);
@@ -26,7 +28,7 @@ export default function App() {
     switch (activePage) {
       case 'dashboard': return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
       case 'clients': return <Clients store={store} onSell={handleSell} />;
-      case 'schedule': return <Schedule store={store} />;
+      case 'schedule': return <Schedule store={store} onSell={handleSell} />;
       case 'subscriptions': return <Subscriptions store={store} onSell={handleSell} />;
       case 'sales': return <Sales store={store} onSell={() => handleSell()} />;
       case 'finance': return <Finance store={store} />;
@@ -38,7 +40,7 @@ export default function App() {
 
   return (
     <>
-      <Layout activePage={activePage} onNavigate={setActivePage} store={store} onSell={() => handleSell()}>
+      <Layout activePage={activePage} onNavigate={setActivePage} store={store} onSell={() => handleSell()} onInquiry={() => setShowInquiry(true)}>
         {renderPage()}
       </Layout>
       <SellModal
@@ -46,6 +48,11 @@ export default function App() {
         onClose={() => { setShowSell(false); setSellClientId(undefined); }}
         store={store}
         preselectedClientId={sellClientId}
+      />
+      <InquiryModal
+        open={showInquiry}
+        onClose={() => setShowInquiry(false)}
+        store={store}
       />
     </>
   );

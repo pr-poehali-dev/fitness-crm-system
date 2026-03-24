@@ -11,11 +11,13 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'trainers' | 'plans' | 'single';
+type Tab = 'trainings' | 'trainers' | 'plans' | 'single' | 'sources';
 
 export default function Settings({ store }: SettingsProps) {
-  const { state, addTrainingType, addTrainer, addSubscriptionPlan, addSingleVisitPlan } = store;
+  const { state, addTrainingType, addTrainer, addSubscriptionPlan, addSingleVisitPlan, addContactChannel, addAdSource } = store;
   const [tab, setTab] = useState<Tab>('trainings');
+  const [newChannel, setNewChannel] = useState('');
+  const [newSource, setNewSource] = useState('');
   const [showAddTraining, setShowAddTraining] = useState(false);
   const [showAddTrainer, setShowAddTrainer] = useState(false);
   const [showAddPlan, setShowAddPlan] = useState(false);
@@ -36,6 +38,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'trainers', label: 'Тренеры', icon: 'User' },
     { id: 'plans', label: 'Абонементы', icon: 'CreditCard' },
     { id: 'single', label: 'Разовые визиты', icon: 'Ticket' },
+    { id: 'sources', label: 'Источники', icon: 'Megaphone' },
   ];
 
   const handleAddTraining = () => {
@@ -213,6 +216,63 @@ export default function Settings({ store }: SettingsProps) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sources tab */}
+      {tab === 'sources' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white border border-border rounded-xl p-5">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Каналы связи</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {state.contactChannels.map(ch => (
+                  <span key={ch} className="text-sm px-3 py-1.5 rounded-full bg-secondary border border-border">{ch}</span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newChannel}
+                  onChange={e => setNewChannel(e.target.value)}
+                  placeholder="Новый канал..."
+                  className="text-sm"
+                  onKeyDown={e => { if (e.key === 'Enter' && newChannel) { addContactChannel(newChannel); setNewChannel(''); }}}
+                />
+                <Button
+                  onClick={() => { if (newChannel) { addContactChannel(newChannel); setNewChannel(''); } }}
+                  disabled={!newChannel}
+                  className="bg-foreground text-primary-foreground shrink-0"
+                >
+                  <Icon name="Plus" size={14} />
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-border rounded-xl p-5">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Рекламные источники</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {state.adSources.map(src => (
+                  <span key={src} className="text-sm px-3 py-1.5 rounded-full bg-secondary border border-border">{src}</span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newSource}
+                  onChange={e => setNewSource(e.target.value)}
+                  placeholder="Новый источник..."
+                  className="text-sm"
+                  onKeyDown={e => { if (e.key === 'Enter' && newSource) { addAdSource(newSource); setNewSource(''); }}}
+                />
+                <Button
+                  onClick={() => { if (newSource) { addAdSource(newSource); setNewSource(''); } }}
+                  disabled={!newSource}
+                  className="bg-foreground text-primary-foreground shrink-0"
+                >
+                  <Icon name="Plus" size={14} />
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -119,6 +119,15 @@ export interface SingleVisitPlan {
   branchId: string;
 }
 
+export interface Inquiry {
+  id: string;
+  branchId: string;
+  date: string;
+  channel: string;
+  adSource: string;
+  note: string;
+}
+
 const defaultBranches: Branch[] = [
   { id: 'b1', name: 'Центральный', address: 'ул. Ленина, 1', phone: '+7 (999) 000-00-01' },
   { id: 'b2', name: 'Северный', address: 'пр. Победы, 15', phone: '+7 (999) 000-00-02' },
@@ -189,6 +198,12 @@ const defaultSales: Sale[] = [
   { id: 'sl4', clientId: 'c5', type: 'subscription', itemId: 'p1', itemName: 'Безлимит на месяц', price: 4500, discount: 10, finalPrice: 4050, paymentMethod: 'card', date: fmt(addDays(today, -5)), branchId: 'b1', isFirstSubscription: false, isReturn: false, isRenewal: true },
 ];
 
+const defaultInquiries: Inquiry[] = [
+  { id: 'inq1', branchId: 'b1', date: fmt(addDays(today, -2)), channel: 'Instagram', adSource: 'Таргет', note: '' },
+  { id: 'inq2', branchId: 'b1', date: fmt(addDays(today, -1)), channel: 'WhatsApp', adSource: 'Сарафанное радио', note: '' },
+  { id: 'inq3', branchId: 'b1', date: fmt(today), channel: 'Телефон', adSource: 'Вывеска', note: '' },
+];
+
 export interface AppState {
   branches: Branch[];
   trainers: Trainer[];
@@ -200,6 +215,9 @@ export interface AppState {
   schedule: ScheduleEntry[];
   visits: Visit[];
   sales: Sale[];
+  inquiries: Inquiry[];
+  contactChannels: string[];
+  adSources: string[];
   currentBranchId: string;
 }
 
@@ -214,6 +232,9 @@ const initialState: AppState = {
   schedule: defaultSchedule,
   visits: defaultVisits,
   sales: defaultSales,
+  inquiries: defaultInquiries,
+  contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
+  adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
 };
 
@@ -347,6 +368,19 @@ export function useStore() {
     });
   };
 
+  // Inquiries
+  const addInquiry = (inquiry: Omit<Inquiry, 'id'>) => {
+    update(s => ({ ...s, inquiries: [...s.inquiries, { ...inquiry, id: genId() }] }));
+  };
+
+  const addContactChannel = (channel: string) => {
+    update(s => ({ ...s, contactChannels: [...s.contactChannels, channel] }));
+  };
+
+  const addAdSource = (source: string) => {
+    update(s => ({ ...s, adSources: [...s.adSources, source] }));
+  };
+
   // Branches & Settings
   const addBranch = (branch: Omit<Branch, 'id'>) => {
     update(s => ({ ...s, branches: [...s.branches, { ...branch, id: genId() }] }));
@@ -395,6 +429,7 @@ export function useStore() {
     freezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, enrollClient, markVisit,
     addBranch, addTrainer, addTrainingType, addSubscriptionPlan, addSingleVisitPlan,
+    addInquiry, addContactChannel, addAdSource,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };

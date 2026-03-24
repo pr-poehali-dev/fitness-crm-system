@@ -26,19 +26,15 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
 
-  const newbiesEnrolled = state.visits.filter(v => {
-    const client = state.clients.find(c => c.id === v.clientId);
-    if (!client) return false;
-    const cat = getClientCategory(client);
-    return cat === 'new' && v.status === 'enrolled';
-  }).length;
+  // New clients registered this month (= inquiries that turned into clients)
+  const newClientsMonth = branchClients.filter(c => c.createdAt >= monthStart).length;
 
-  const newbiesAttended = state.visits.filter(v => {
-    const client = state.clients.find(c => c.id === v.clientId);
-    if (!client) return false;
-    const cat = getClientCategory(client);
-    return cat === 'new' && v.status === 'attended';
-  }).length;
+  // Newbies who bought subscription this month
+  const newbiesBoughtSub = monthSubSales.filter(s => s.isFirstSubscription).length;
+
+  // Inquiries this month (standalone) + new clients = total inquiries
+  const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && i.date >= monthStart).length;
+  const totalInquiries = monthInquiries + newClientsMonth;
 
   const todayStr = now.toISOString().split('T')[0];
   const todaySchedule = state.schedule.filter(s => s.branchId === state.currentBranchId && s.date === todayStr);
@@ -46,10 +42,10 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const recentSales = branchSales.slice(-5).reverse();
 
   const stats = [
+    { label: 'Обращений за месяц', value: totalInquiries, sub: `${monthInquiries} внешних + ${newClientsMonth} регистраций`, icon: 'PhoneIncoming', color: 'text-violet-600' },
+    { label: 'Новички купили абонемент', value: newbiesBoughtSub, sub: 'первая покупка', icon: 'UserPlus', color: 'text-emerald-600' },
     { label: 'Продаж абонементов', value: totalSubs, sub: 'за месяц', icon: 'CreditCard', color: 'text-blue-600' },
     { label: 'Средний чек', value: `${avgCheck.toLocaleString()} ₽`, sub: 'по абонементам', icon: 'TrendingUp', color: 'text-green-600' },
-    { label: 'Новички записались', value: newbiesEnrolled, sub: 'первичные', icon: 'UserPlus', color: 'text-violet-600' },
-    { label: 'Новички дошли', value: newbiesAttended, sub: 'посетили занятие', icon: 'CheckCircle2', color: 'text-emerald-600' },
   ];
 
   return (

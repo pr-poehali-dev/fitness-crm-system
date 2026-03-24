@@ -33,6 +33,19 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const sales = state.sales.filter(s => s.clientId === client.id);
   const branch = state.branches.find(b => b.id === client.branchId);
 
+  // Metrics
+  const totalSpent = sales.reduce((sum, s) => sum + s.finalPrice, 0);
+  const attendedVisits = visits.filter(v => v.status === 'attended');
+  // Visits per week: count last 4 weeks
+  const fourWeeksAgo = new Date(); fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+  const recentAttended = attendedVisits.filter(v => new Date(v.date) >= fourWeeksAgo);
+  const visitsPerWeek = recentAttended.length > 0 ? (recentAttended.length / 4).toFixed(1) : '0';
+  // Avg training cost: sum of sub prices / total attended visits (from subs)
+  const subSalesTotal = sales.filter(s => s.type === 'subscription').reduce((sum, s) => sum + s.finalPrice, 0);
+  const avgTrainingCost = attendedVisits.length > 0 && subSalesTotal > 0
+    ? Math.round(subSalesTotal / attendedVisits.length)
+    : null;
+
   const catLabel = { new: 'Новичок', loyal: 'Лояльный', sleeping: 'Уснувший', lost: 'Потерянный' }[cat];
   const badgeClass = { new: 'badge-new', loyal: 'badge-loyal', sleeping: 'badge-sleeping', lost: 'badge-lost' }[cat];
 
@@ -84,6 +97,24 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Stats metrics */}
+        <div className="px-5 py-4 border-b border-border">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-secondary rounded-xl px-3 py-2.5 text-center">
+              <div className="text-lg font-bold leading-tight">{visitsPerWeek}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">раз/неделю</div>
+            </div>
+            <div className="bg-secondary rounded-xl px-3 py-2.5 text-center">
+              <div className="text-lg font-bold leading-tight">{totalSpent > 0 ? `${(totalSpent / 1000).toFixed(1)}к` : '—'}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">потрачено ₽</div>
+            </div>
+            <div className="bg-secondary rounded-xl px-3 py-2.5 text-center">
+              <div className="text-lg font-bold leading-tight">{avgTrainingCost ? `${avgTrainingCost}₽` : '—'}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">за тренировку</div>
+            </div>
+          </div>
+        </div>
+
         {/* Info */}
         <div className="px-5 py-4 border-b border-border">
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -98,7 +129,10 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
             )}
           </div>
           {client.comment && (
-            <div className="mt-2 text-sm bg-secondary rounded-lg px-3 py-2 text-muted-foreground">{client.comment}</div>
+            <div className="mt-2 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800 flex gap-2 items-start">
+              <span className="mt-0.5 shrink-0">💬</span>
+              <span>{client.comment}</span>
+            </div>
           )}
         </div>
 
