@@ -101,8 +101,20 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   // Open "attended" modal with available bases
   const openAttendModal = (clientId: string, entryId: string) => {
     const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
-    if (!visit) return;
-    setAttendModal({ clientId, entryId, visitId: visit.id });
+    const visitId = visit?.id;
+    if (!visitId) {
+      // Auto-enroll to create the visit record, then open modal after re-render
+      enrollClient(entryId, clientId);
+      setTimeout(() => {
+        const newVisit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
+        if (newVisit) {
+          setAttendModal({ clientId, entryId, visitId: newVisit.id });
+          setSelectedBasis(null);
+        }
+      }, 50);
+      return;
+    }
+    setAttendModal({ clientId, entryId, visitId });
     setSelectedBasis(null);
   };
 
@@ -111,7 +123,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     const isSingle = selectedBasis.type === 'single';
     const subId = selectedBasis.type === 'subscription' ? selectedBasis.subId : null;
     const singlePlan = isSingle && selectedBasis.type === 'single' ? state.singleVisitPlans.find(p => p.id === selectedBasis.planId) : null;
-    markVisit(attendModal.visitId, 'attended', subId, isSingle, singlePlan?.price || 0);
+    // Find latest visit id (may have been created)
+    const visit = state.visits.find(v => v.clientId === attendModal.clientId && v.scheduleEntryId === attendModal.entryId);
+    const visitId = visit?.id || attendModal.visitId;
+    markVisit(visitId, 'attended', subId, isSingle, singlePlan?.price || 0);
     setAttendModal(null);
     setSelectedBasis(null);
   };
@@ -119,8 +134,16 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   // Handle missed/cancelled directly
   const handleMarkVisit = (clientId: string, entryId: string, status: 'missed' | 'cancelled') => {
     const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
-    if (!visit) return;
-    markVisit(visit.id, status, null, false, 0);
+    if (visit) {
+      markVisit(visit.id, status, null, false, 0);
+    } else {
+      // no visit record — enroll creates it, then mark
+      enrollClient(entryId, clientId);
+      setTimeout(() => {
+        const newVisit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
+        if (newVisit) markVisit(newVisit.id, status, null, false, 0);
+      }, 50);
+    }
   };
 
   const isFirstEverTraining = (clientId: string) => {

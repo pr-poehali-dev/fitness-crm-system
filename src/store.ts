@@ -150,6 +150,18 @@ export interface ExpenseCategory {
   branchId: string;
 }
 
+export interface SalesPlanItem {
+  planId: string;
+  target: number;
+}
+
+export interface SalesPlan {
+  id: string;
+  branchId: string;
+  month: string;
+  items: SalesPlanItem[];
+}
+
 export interface Expense {
   id: string;
   branchId: string;
@@ -278,6 +290,7 @@ export interface AppState {
   inquiries: Inquiry[];
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
+  salesPlans: SalesPlan[];
   contactChannels: string[];
   adSources: string[];
   currentBranchId: string;
@@ -299,6 +312,7 @@ const initialState: AppState = {
   inquiries: defaultInquiries,
   expenseCategories: defaultExpenseCategories,
   expenses: defaultExpenses,
+  salesPlans: [],
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
   adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
@@ -466,6 +480,17 @@ export function useStore() {
   const addExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
     update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
   };
+
+  // Sales Plans
+  const setSalesPlan = (branchId: string, month: string, items: SalesPlanItem[]) => {
+    update(s => {
+      const existing = s.salesPlans.find(p => p.branchId === branchId && p.month === month);
+      if (existing) {
+        return { ...s, salesPlans: s.salesPlans.map(p => p.branchId === branchId && p.month === month ? { ...p, items } : p) };
+      }
+      return { ...s, salesPlans: [...s.salesPlans, { id: genId(), branchId, month, items }] };
+    });
+  };
   const updateExpenseCategory = (id: string, data: Partial<ExpenseCategory>) => {
     update(s => ({ ...s, expenseCategories: s.expenseCategories.map(c => c.id === id ? { ...c, ...data } : c) }));
   };
@@ -581,6 +606,7 @@ export function useStore() {
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
+    setSalesPlan,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };

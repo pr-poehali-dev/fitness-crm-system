@@ -31,18 +31,45 @@ export default function Clients({ store, onSell }: ClientsProps) {
   const [category, setCategory] = useState<ClientCategory | 'all'>('all');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [form, setForm] = useState({
     firstName: '', lastName: '', middleName: '', phone: '',
     contactChannel: 'whatsapp' as Client['contactChannel'],
     referralSource: '', adSource: '', birthDate: '', comment: ''
   });
 
-  const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
+  // Advanced filters
+  const [filterPlanId, setFilterPlanId] = useState('');
+  const [filterBranchId, setFilterBranchId] = useState('');
+  const [filterSubStart, setFilterSubStart] = useState('');
+  const [filterSubEnd, setFilterSubEnd] = useState('');
+  const [filterBirthMonth, setFilterBirthMonth] = useState('');
 
-  const filtered = branchClients.filter(c => {
+  const activeFiltersCount = [filterPlanId, filterBranchId, filterSubStart, filterSubEnd, filterBirthMonth].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setFilterPlanId(''); setFilterBranchId(''); setFilterSubStart('');
+    setFilterSubEnd(''); setFilterBirthMonth('');
+  };
+
+  const allBranchClients = filterBranchId === '__all__'
+    ? state.clients
+    : filterBranchId
+      ? state.clients.filter(c => c.branchId === filterBranchId)
+      : state.clients.filter(c => c.branchId === state.currentBranchId);
+
+  const filtered = allBranchClients.filter(c => {
     const matchSearch = !search || getClientFullName(c).toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchCat = category === 'all' || getClientCategory(c) === category;
-    return matchSearch && matchCat;
+
+    const sub = c.activeSubscriptionId ? state.subscriptions.find(s => s.id === c.activeSubscriptionId) : null;
+
+    const matchPlan = !filterPlanId || (sub?.planId === filterPlanId);
+    const matchSubStart = !filterSubStart || (sub?.purchaseDate && sub.purchaseDate >= filterSubStart);
+    const matchSubEnd = !filterSubEnd || (sub?.endDate && sub.endDate <= filterSubEnd);
+    const matchBirth = !filterBirthMonth || (c.birthDate && c.birthDate.slice(5, 7) === filterBirthMonth.padStart(2, '0'));
+
+    return matchSearch && matchCat && matchPlan && matchSubStart && matchSubEnd && matchBirth;
   });
 
   // Global search by phone (other branches)
@@ -79,11 +106,67 @@ export default function Clients({ store, onSell }: ClientsProps) {
               className="pl-9"
             />
           </div>
+          <button
+            onClick={() => setShowFilters(f => !f)}
+            className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFiltersCount > 0 ? 'bg-foreground text-primary-foreground border-foreground' : 'bg-white border-border hover:bg-secondary'}`}
+          >
+            <Icon name="SlidersHorizontal" size={15} />
+            Фильтры
+            {activeFiltersCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{activeFiltersCount}</span>
+            )}
+          </button>
           <Button onClick={() => setShowNew(true)} className="bg-foreground text-primary-foreground hover:opacity-90 shrink-0">
             <Icon name="UserPlus" size={15} className="mr-1.5" />
             Новый клиент
           </Button>
         </div>
+
+        {showFilters && (
+          <div className="bg-white border border-border rounded-xl p-4 mb-4 space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Фильтры</span>
+              {activeFiltersCount > 0 && (
+                <button onClick={clearFilters} className="text-xs text-red-500 hover:text-red-700">Сбросить все</button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Абонемент</label>
+                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterPlanId} onChange={e => setFilterPlanId(e.target.value)}>
+                  <option value="">Все абонементы</option>
+                  {state.subscriptionPlans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Филиал</label>
+                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterBranchId} onChange={e => setFilterBranchId(e.target.value)}>
+                  <option value="">Текущий филиал</option>
+                  {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <option value="__all__">Все филиалы</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Абон. куплен с</label>
+                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubStart} onChange={e => setFilterSubStart(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Абон. истекает до</label>
+                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubEnd} onChange={e => setFilterSubEnd(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Месяц рождения</label>
+                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterBirthMonth} onChange={e => setFilterBirthMonth(e.target.value)}>
+                  <option value="">Любой</option>
+                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, i) => (
+                    <option key={m} value={m}>{new Date(2000, i, 1).toLocaleDateString('ru-RU', { month: 'long' })}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">Найдено: {filtered.length} клиентов</div>
+          </div>
+        )}
 
         <div className="flex gap-1 mb-4">
           {categories.map(cat => (

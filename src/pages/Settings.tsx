@@ -16,7 +16,7 @@ type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'sin
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
   '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16',
-  '#a8e6cf', '#d4b8e0', '#f4c2c2', '#fff0a0',
+  '#a8e6cf', '#d4b8e0', '#f4c2c2', '#fff0a0', '#b7f5b8',
 ];
 
 const COLOR_LABELS: Record<string, string> = {
@@ -24,6 +24,7 @@ const COLOR_LABELS: Record<string, string> = {
   '#d4b8e0': 'Лавандовый',
   '#f4c2c2': 'Розово-пудровый',
   '#fff0a0': 'Пастельно-жёлтый',
+  '#b7f5b8': 'Светло-зелёный',
 };
 
 function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {

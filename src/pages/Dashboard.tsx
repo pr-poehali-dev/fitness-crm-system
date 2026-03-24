@@ -1,5 +1,10 @@
+import { useState } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 interface DashboardProps {
   store: StoreType;
@@ -8,61 +13,87 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
-  const { state, getClientCategory } = store;
+  const { state, getClientCategory, setSalesPlan } = store;
   const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
+  const [showPlanEditor, setShowPlanEditor] = useState(false);
+  const [planInputs, setPlanInputs] = useState<Record<string, string>>({});
 
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   const monthSubSales = branchSales.filter(s => s.type === 'subscription' && s.date >= monthStart);
-
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
   const returnSubs = monthSubSales.filter(s => s.isReturn).length;
 
-  const avgCheck = totalSubs > 0
-    ? Math.round(monthSubSales.reduce((sum, s) => sum + s.finalPrice, 0) / totalSubs)
-    : 0;
-
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
-
-  // New clients registered this month (= inquiries that turned into clients)
   const newClientsMonth = branchClients.filter(c => c.createdAt >= monthStart).length;
-
-  // Newbies who bought subscription this month
-  const newbiesBoughtSub = monthSubSales.filter(s => s.isFirstSubscription).length;
-
-  // Inquiries this month (standalone) + new clients = total inquiries
   const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && i.date >= monthStart).length;
   const totalInquiries = monthInquiries + newClientsMonth;
 
   const todayStr = now.toISOString().split('T')[0];
   const todaySchedule = state.schedule.filter(s => s.branchId === state.currentBranchId && s.date === todayStr);
 
-  // Visit stats for current month
   const branchScheduleIds = new Set(state.schedule.filter(e => e.branchId === state.currentBranchId).map(e => e.id));
   const monthVisits = state.visits.filter(v => branchScheduleIds.has(v.scheduleEntryId) && v.date >= monthStart);
   const attendedMonth = monthVisits.filter(v => v.status === 'attended').length;
   const missedMonth = monthVisits.filter(v => v.status === 'missed').length;
   const cancelledMonth = monthVisits.filter(v => v.status === 'cancelled').length;
 
+  // Sales plan
+  const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
+  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
+
+  const planRows = branchPlans.map(plan => {
+    const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
+    const sold = monthSubSales.filter(s => s.itemId === plan.id).length;
+    const left = Math.max(0, target - sold);
+    const pct = target > 0 ? Math.min(100, Math.round((sold / target) * 100)) : null;
+    return { plan, target, sold, left, pct };
+  });
+
+  const totalTarget = planRows.reduce((s, r) => s + r.target, 0);
+  const totalSold = planRows.reduce((s, r) => s + r.sold, 0);
+  const totalLeft = planRows.reduce((s, r) => s + r.left, 0);
+  const totalPct = totalTarget > 0 ? Math.min(100, Math.round((totalSold / totalTarget) * 100)) : null;
+
+  const openPlanEditor = () => {
+    const init: Record<string, string> = {};
+    branchPlans.forEach(p => {
+      const t = currentPlan?.items.find(i => i.planId === p.id)?.target ?? 0;
+      init[p.id] = t > 0 ? String(t) : '';
+    });
+    setPlanInputs(init);
+    setShowPlanEditor(true);
+  };
+
+  const savePlan = () => {
+    const items = branchPlans
+      .map(p => ({ planId: p.id, target: Number(planInputs[p.id] || 0) }))
+      .filter(i => i.target > 0);
+    setSalesPlan(state.currentBranchId, currentMonth, items);
+    setShowPlanEditor(false);
+  };
+
   const recentSales = branchSales.slice(-5).reverse();
 
-  const stats = [
-    { label: 'Обращений за месяц', value: totalInquiries, sub: `${monthInquiries} внешних + ${newClientsMonth} регистраций`, icon: 'PhoneIncoming', color: 'text-violet-600' },
-    { label: 'Продаж абонементов', value: totalSubs, sub: 'за месяц', icon: 'CreditCard', color: 'text-blue-600' },
-    { label: 'Средний чек', value: `${avgCheck.toLocaleString()} ₽`, sub: 'по абонементам', icon: 'TrendingUp', color: 'text-green-600' },
-    { label: 'Пришли за месяц', value: attendedMonth, sub: `${missedMonth} не пришли · ${cancelledMonth} отменили`, icon: 'UserCheck', color: 'text-emerald-600' },
-  ];
+  const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Stats row */}
+    <div className="space-y-5 animate-fade-in">
+      {/* Key stats: в нужном порядке */}
       <div className="grid grid-cols-4 gap-4">
-        {stats.map((s, i) => (
+        {[
+          { label: 'Обращений за месяц', value: totalInquiries, sub: `${monthInquiries} вх. + ${newClientsMonth} рег.`, icon: 'PhoneIncoming', color: 'text-violet-600' },
+          { label: 'Дошло новичков', value: attendedMonth > 0 ? newClientsMonth : newClientsMonth, sub: 'зарегистрировано в этом месяце', icon: 'UserRound', color: 'text-blue-500' },
+          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600' },
+          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground' },
+        ].map((s, i) => (
           <div key={i} className="stat-card">
             <div className="flex items-start justify-between mb-3">
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{s.label}</span>
+              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">{s.label}</span>
               <Icon name={s.icon} size={16} className={s.color} />
             </div>
             <div className="text-2xl font-semibold">{s.value}</div>
@@ -71,46 +102,124 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         ))}
       </div>
 
-      {/* Visit stats */}
-      <div className="bg-white border border-border rounded-xl p-5">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Посещаемость за месяц</div>
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Пришли', value: attendedMonth, color: 'bg-emerald-500', textColor: 'text-emerald-600', total: attendedMonth + missedMonth + cancelledMonth },
-            { label: 'Не пришли', value: missedMonth, color: 'bg-red-400', textColor: 'text-red-600', total: attendedMonth + missedMonth + cancelledMonth },
-            { label: 'Отменили', value: cancelledMonth, color: 'bg-orange-400', textColor: 'text-orange-600', total: attendedMonth + missedMonth + cancelledMonth },
-          ].map(item => (
-            <div key={item.label}>
-              <div className={`text-2xl font-bold ${item.textColor}`}>{item.value}</div>
-              <div className="text-xs text-muted-foreground mt-0.5 mb-2">{item.label}</div>
-              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div className={`h-full ${item.color} rounded-full`} style={{ width: item.total ? `${(item.value / item.total) * 100}%` : '0%' }} />
-              </div>
-            </div>
-          ))}
+      {/* Sales plan table */}
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">План продаж</div>
+            <div className="text-xs text-muted-foreground mt-0.5 capitalize">{monthLabel}</div>
+          </div>
+          <Button onClick={openPlanEditor} variant="outline" className="text-xs h-8 px-3">
+            <Icon name="Settings" size={13} className="mr-1.5" />
+            Задать план
+          </Button>
         </div>
+        {branchPlans.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Нет абонементов для этого филиала</div>
+        ) : (
+          <table className="w-full data-table">
+            <thead>
+              <tr>
+                <th>Абонемент</th>
+                <th className="text-center">План</th>
+                <th className="text-center">Продано</th>
+                <th className="text-center">Осталось</th>
+                <th className="text-center">Выполнение</th>
+              </tr>
+            </thead>
+            <tbody>
+              {planRows.map(({ plan, target, sold, left, pct }) => (
+                <tr key={plan.id}>
+                  <td className="font-medium">{plan.name}</td>
+                  <td className="text-center text-muted-foreground">{target > 0 ? target : '—'}</td>
+                  <td className="text-center font-medium">{sold}</td>
+                  <td className="text-center">
+                    {target > 0 ? (
+                      <span className={left === 0 ? 'text-emerald-600 font-medium' : 'text-muted-foreground'}>{left === 0 ? '✓' : left}</span>
+                    ) : '—'}
+                  </td>
+                  <td className="text-center">
+                    {pct !== null ? (
+                      <div className="flex items-center gap-2 justify-center">
+                        <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className={`text-xs font-medium ${pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
+                      </div>
+                    ) : <span className="text-muted-foreground text-xs">нет плана</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-secondary/30 font-semibold">
+                <td className="px-4 py-3 text-sm">Итого</td>
+                <td className="text-center px-4 py-3 text-sm">{totalTarget > 0 ? totalTarget : '—'}</td>
+                <td className="text-center px-4 py-3 text-sm">{totalSold}</td>
+                <td className="text-center px-4 py-3 text-sm">
+                  {totalTarget > 0 ? (
+                    <span className={totalLeft === 0 ? 'text-emerald-600' : ''}>{totalLeft === 0 ? '✓ Выполнен' : totalLeft}</span>
+                  ) : '—'}
+                </td>
+                <td className="text-center px-4 py-3">
+                  {totalPct !== null ? (
+                    <div className="flex items-center gap-2 justify-center">
+                      <div className="w-20 h-2 bg-secondary rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${totalPct >= 100 ? 'bg-emerald-500' : totalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                          style={{ width: `${totalPct}%` }} />
+                      </div>
+                      <span className={`text-sm font-bold ${totalPct >= 100 ? 'text-emerald-600' : totalPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{totalPct}%</span>
+                    </div>
+                  ) : null}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
 
-      {/* Sales breakdown */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Visit stats + sales breakdown + client base + schedule */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white border border-border rounded-xl p-5">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Посещаемость</div>
+          <div className="space-y-3">
+            {[
+              { label: 'Пришли', value: attendedMonth, color: 'bg-emerald-500', textColor: 'text-emerald-600' },
+              { label: 'Не пришли', value: missedMonth, color: 'bg-red-400', textColor: 'text-red-500' },
+              { label: 'Отменили', value: cancelledMonth, color: 'bg-orange-400', textColor: 'text-orange-500' },
+            ].map(item => {
+              const total = attendedMonth + missedMonth + cancelledMonth;
+              return (
+                <div key={item.label}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-muted-foreground">{item.label}</span>
+                    <span className={`font-semibold ${item.textColor}`}>{item.value}</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className={`h-full ${item.color} rounded-full`} style={{ width: total ? `${(item.value / total) * 100}%` : '0%' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="bg-white border border-border rounded-xl p-5">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Структура продаж</div>
           <div className="space-y-3">
             {[
-              { label: 'Первая покупка', value: firstTimeSubs, color: 'bg-blue-500', total: totalSubs },
-              { label: 'Продление', value: renewalSubs, color: 'bg-emerald-500', total: totalSubs },
-              { label: 'Возвращение', value: returnSubs, color: 'bg-amber-500', total: totalSubs },
+              { label: 'Первая покупка', value: firstTimeSubs, color: 'bg-blue-500' },
+              { label: 'Продление', value: renewalSubs, color: 'bg-emerald-500' },
+              { label: 'Возвращение', value: returnSubs, color: 'bg-amber-500' },
             ].map(item => (
               <div key={item.label}>
-                <div className="flex justify-between text-sm mb-1.5">
+                <div className="flex justify-between text-sm mb-1">
                   <span className="text-muted-foreground">{item.label}</span>
                   <span className="font-medium">{item.value}</span>
                 </div>
                 <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                    style={{ width: item.total ? `${(item.value / item.total) * 100}%` : '0%' }}
-                  />
+                  <div className={`h-full ${item.color} rounded-full`} style={{ width: totalSubs ? `${(item.value / totalSubs) * 100}%` : '0%' }} />
                 </div>
               </div>
             ))}
@@ -126,7 +235,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
               { label: 'Уснувшие', count: branchClients.filter(c => getClientCategory(c) === 'sleeping').length, badge: 'badge-sleeping' },
               { label: 'Потерянные', count: branchClients.filter(c => getClientCategory(c) === 'lost').length, badge: 'badge-lost' },
             ].map(item => (
-              <div key={item.label} className="flex items-center justify-between py-1.5">
+              <div key={item.label} className="flex items-center justify-between py-1">
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.badge}`}>{item.count}</span>
               </div>
@@ -138,17 +247,19 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         </div>
 
         <div className="bg-white border border-border rounded-xl p-5">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Сегодня в расписании</div>
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Сегодня</div>
           <div className="space-y-2">
             {todaySchedule.length === 0 && <p className="text-sm text-muted-foreground">Занятий нет</p>}
             {todaySchedule.map(entry => {
               const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
+              const cat = tt?.categoryId ? state.trainingCategories.find(c => c.id === tt.categoryId) : null;
+              const color = cat?.color || tt?.color || '#888';
               return (
-                <div key={entry.id} className="flex items-center gap-3 py-1.5">
-                  <div className="w-1 h-8 rounded-full" style={{ background: tt?.color || '#888' }} />
-                  <div>
-                    <div className="text-sm font-medium">{entry.time} — {tt?.name}</div>
-                    <div className="text-xs text-muted-foreground">{entry.enrolledClientIds.length} / {entry.maxCapacity} записей</div>
+                <div key={entry.id} className="flex items-center gap-3 py-1">
+                  <div className="w-1 h-8 rounded-full shrink-0" style={{ background: color }} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{entry.time} — {tt?.name}</div>
+                    <div className="text-xs text-muted-foreground">{entry.enrolledClientIds.length} / {entry.maxCapacity}</div>
                   </div>
                 </div>
               );
@@ -170,20 +281,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         </div>
         <table className="w-full data-table">
           <thead>
-            <tr>
-              <th>Клиент</th>
-              <th>Товар</th>
-              <th>Тип</th>
-              <th>Оплата</th>
-              <th>Сумма</th>
-              <th>Дата</th>
-            </tr>
+            <tr><th>Клиент</th><th>Товар</th><th>Тип</th><th>Оплата</th><th>Сумма</th><th>Дата</th></tr>
           </thead>
           <tbody>
             {recentSales.map(sale => {
               const client = state.clients.find(c => c.id === sale.clientId);
               return (
-                <tr key={sale.id} className="cursor-pointer">
+                <tr key={sale.id}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
                   <td className="text-muted-foreground">{sale.itemName}</td>
                   <td>
@@ -199,10 +303,29 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             })}
           </tbody>
         </table>
-        {recentSales.length === 0 && (
-          <div className="py-10 text-center text-sm text-muted-foreground">Продаж пока нет</div>
-        )}
+        {recentSales.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">Продаж пока нет</div>}
       </div>
+
+      {/* Plan editor modal */}
+      <Dialog open={showPlanEditor} onOpenChange={setShowPlanEditor}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>План продаж — <span className="capitalize">{monthLabel}</span></DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Укажите целевое количество продаж для каждого абонемента в этом месяце.</p>
+            {branchPlans.map(plan => (
+              <div key={plan.id} className="flex items-center gap-3">
+                <Label className="flex-1 text-sm">{plan.name}</Label>
+                <Input type="number" min="0" placeholder="0" value={planInputs[plan.id] || ''}
+                  onChange={e => setPlanInputs(p => ({ ...p, [plan.id]: e.target.value }))}
+                  className="w-24 text-center" />
+              </div>
+            ))}
+            <Button onClick={savePlan} className="w-full bg-foreground text-primary-foreground mt-2">Сохранить план</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
