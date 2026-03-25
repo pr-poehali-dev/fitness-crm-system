@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { StoreType, ScheduleEntry } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -27,7 +27,7 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const NO_HALL_ID = '__no_hall__';
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
-  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit } = store;
+  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule } = store;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHallId, setSelectedHallId] = useState<string>(NO_HALL_ID);
@@ -51,7 +51,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     { type: 'subscription'; subId: string } | { type: 'single'; planId: string } | null
   >(null);
 
-  const gridRef = useRef<HTMLDivElement>(null);
+
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -274,15 +274,112 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     doc.save(`raspisanie-${weekDays[0]}.pdf`);
   };
 
-  // Export PNG
+  // Export PNG — рисуем таблицу на canvas: время × дни недели
   const exportPNG = async () => {
-    if (!gridRef.current) return;
-    const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(gridRef.current, { scale: 2, backgroundColor: '#ffffff' });
+    const allEntries = state.schedule.filter(e => e.branchId === state.currentBranchId && weekDays.includes(e.date) && filterEntry(e));
+    const times = [...new Set(allEntries.map(e => e.time))].sort();
+    if (times.length === 0) { alert('Нет тренировок для выгрузки'); return; }
+    const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    const colW = 160, rowH = 70, timeColW = 60, headerH = 36, padding = 8;
+    const totalW = timeColW + colW * 7;
+    const totalH = headerH + rowH * times.length;
+    const canvas = document.createElement('canvas');
+    const scale = 2;
+    canvas.width = totalW * scale;
+    canvas.height = totalH * scale;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, totalW, totalH);
+    // header bg
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, totalW, headerH);
+    // day headers
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    dayNames.forEach((d, i) => {
+      ctx.fillText(d, timeColW + colW * i + colW / 2, headerH / 2);
+    });
+    // time column header
+    ctx.fillStyle = '#888';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Время', timeColW / 2, headerH / 2);
+    // rows
+    times.forEach((time, ri) => {
+      const y = headerH + rowH * ri;
+      // alternating row bg
+      ctx.fillStyle = ri % 2 === 0 ? '#f8f8f8' : '#ffffff';
+      ctx.fillRect(0, y, totalW, rowH);
+      // time cell
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(time, timeColW / 2, y + rowH / 2);
+      // cells
+      weekDays.forEach((dateStr, di) => {
+        const x = timeColW + colW * di;
+        const cellEntries = allEntries.filter(e => e.date === dateStr && e.time === time);
+        let textY = y + padding + 12;
+        cellEntries.forEach(entry => {
+          const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
+          const tr = state.trainers.find(t => t.id === entry.trainerId);
+          const name = entry.isPersonal ? 'Персональная' : (tt?.name || '');
+          const trainerName = tr?.name || '';
+          const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
+          // colored dot
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x + padding + 4, textY - 3, 4, 0, Math.PI * 2);
+          ctx.fill();
+          // name
+          ctx.fillStyle = '#111';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(name, x + padding + 12, textY);
+          textY += 14;
+          // trainer
+          ctx.fillStyle = '#666';
+          ctx.font = '10px sans-serif';
+          ctx.fillText(trainerName, x + padding + 12, textY);
+          textY += 18;
+        });
+      });
+      // grid lines
+      ctx.strokeStyle = '#e5e5e5';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(totalW, y);
+      ctx.stroke();
+      // vertical lines
+      [timeColW, ...weekDays.map((_, i) => timeColW + colW * i)].forEach(x => {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, totalH);
+        ctx.stroke();
+      });
+    });
     const link = document.createElement('a');
     link.download = `raspisanie-${weekDays[0]}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+  };
+
+  // Копировать расписание на следующую неделю
+  const copyToNextWeek = () => {
+    const nextWeekDays = weekDays.map(d => {
+      const dt = new Date(d + 'T12:00:00');
+      dt.setDate(dt.getDate() + 7);
+      return dt.toISOString().split('T')[0];
+    });
+    const entriesThisWeek = state.schedule.filter(e => e.branchId === state.currentBranchId && weekDays.includes(e.date));
+    if (entriesThisWeek.length === 0) { alert('На этой неделе нет тренировок'); return; }
+    if (confirm(`Скопировать ${entriesThisWeek.length} тренировок на следующую неделю?`)) {
+      copyWeekSchedule(weekDays, nextWeekDays);
+      setWeekOffset(w => w + 1);
+    }
   };
 
   const branchTrainers = state.trainers.filter(t => t.branchId === state.currentBranchId);
@@ -344,6 +441,9 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
             ))}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <button onClick={copyToNextWeek} className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-secondary hover:bg-secondary/70 transition-colors text-muted-foreground">
+              <Icon name="Copy" size={13} /> Копировать
+            </button>
             <button onClick={exportPNG} className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-secondary hover:bg-secondary/70 transition-colors text-muted-foreground">
               <Icon name="Image" size={13} /> PNG
             </button>
@@ -354,7 +454,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
         </div>
 
         {/* Week grid — original card style */}
-        <div className="flex-1 overflow-y-auto" ref={gridRef}>
+        <div className="flex-1 overflow-y-auto">
           <div className="grid grid-cols-7 gap-2">
             {weekDays.map(dateStr => {
               const { weekday, date, month, isToday } = formatDayHeader(dateStr);
@@ -532,6 +632,32 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                           >
                             Не пришёл
                           </button>
+                          <button
+                            onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'cancelled')}
+                            className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors font-medium"
+                          >
+                            Отменил
+                          </button>
+                        </div>
+                      )}
+                      {currentStatus === 'attended' && (
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => { if (visit?.id) resetVisit(visit.id); }}
+                            className="text-xs px-2 py-1 rounded bg-secondary text-muted-foreground hover:bg-secondary/70 transition-colors font-medium"
+                          >
+                            Сбросить
+                          </button>
+                        </div>
+                      )}
+                      {(currentStatus === 'missed' || currentStatus === 'cancelled') && (
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => openAttendModal(clientId, selectedEntry.id)}
+                            className="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors font-medium"
+                          >
+                            Пришёл
+                          </button>
                         </div>
                       )}
                     </div>
@@ -614,7 +740,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 <select value={form.trainingTypeId} onChange={e => setForm(f => ({ ...f, trainingTypeId: e.target.value }))}
                   className="w-full h-8 text-sm border border-input rounded-md px-2 bg-white">
                   <option value="">Выберите...</option>
-                  {state.trainingTypes.filter(tt => tt.branchIds.includes(state.currentBranchId)).map(tt => (
+                  {state.trainingTypes.map(tt => (
                     <option key={tt.id} value={tt.id}>{tt.name}</option>
                   ))}
                 </select>

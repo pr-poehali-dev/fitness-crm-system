@@ -40,11 +40,26 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const fourWeeksAgo = new Date(); fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
   const recentAttended = attendedVisits.filter(v => new Date(v.date) >= fourWeeksAgo);
   const visitsPerWeek = recentAttended.length > 0 ? (recentAttended.length / 4).toFixed(1) : '0';
-  // Avg training cost: sum of sub prices / total attended visits (from subs)
-  const subSalesTotal = sales.filter(s => s.type === 'subscription').reduce((sum, s) => sum + s.finalPrice, 0);
-  const avgTrainingCost = attendedVisits.length > 0 && subSalesTotal > 0
-    ? Math.round(subSalesTotal / attendedVisits.length)
-    : null;
+  // Стоимость за тренировку: цена последнего активного абонемента / кол-во занятий
+  // Если безлимит — делить на (среднее посещений/нед с момента активации × 4)
+  const avgTrainingCost = (() => {
+    if (!sub) return null;
+    const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+    const subPrice = sub.price || plan?.price || 0;
+    if (subPrice === 0) return null;
+    if (sub.sessionsLimit !== 'unlimited' && plan && (plan.sessionsLimit as number) > 0) {
+      return Math.round(subPrice / (plan.sessionsLimit as number));
+    }
+    // безлимит — считаем среднее посещений/нед с момента активации
+    const activatedAt = new Date(sub.purchaseDate);
+    const now = new Date();
+    const weeksElapsed = Math.max(1, (now.getTime() - activatedAt.getTime()) / (1000 * 60 * 60 * 24 * 7));
+    const attendedSinceActivation = attendedVisits.filter(v => new Date(v.date) >= activatedAt).length;
+    const avgPerWeek = attendedSinceActivation / weeksElapsed;
+    const monthlyVisits = avgPerWeek * 4;
+    if (monthlyVisits < 0.5) return null;
+    return Math.round(subPrice / monthlyVisits);
+  })();
 
   const catLabel = { new: 'Новичок', loyal: 'Лояльный', sleeping: 'Уснувший', lost: 'Потерянный' }[cat];
   const badgeClass = { new: 'badge-new', loyal: 'badge-loyal', sleeping: 'badge-sleeping', lost: 'badge-lost' }[cat];

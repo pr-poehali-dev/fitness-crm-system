@@ -59,7 +59,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const missedMonth = monthVisits.filter(v => v.status === 'missed').length;
   const cancelledMonth = monthVisits.filter(v => v.status === 'cancelled').length;
 
-  // Записи на первую тренировку — клиенты, у которых нет посещений ДО начала периода
+  // Записи на первую тренировку — клиенты у которых нет attended-визитов ДО начала периода
   const allAttendedByClient: Record<string, string[]> = {};
   state.visits.filter(v => v.status === 'attended').forEach(v => {
     if (!allAttendedByClient[v.clientId]) allAttendedByClient[v.clientId] = [];
@@ -76,6 +76,18 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     if (prevVisits.length === 0) firstEnrollments.add(v.clientId);
   });
   const firstEnrollmentsCount = firstEnrollments.size;
+
+  // Дошло новичков — только те, у кого первый в истории attended-визит попадает в период
+  const attendedNewbies = new Set<string>();
+  state.visits.filter(v => v.status === 'attended').forEach(v => {
+    const clientAttended = allAttendedByClient[v.clientId] || [];
+    const firstDate = [...clientAttended].sort()[0];
+    if (firstDate && inPeriod(firstDate) && firstDate === v.date) {
+      const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
+      if (entry?.branchId === state.currentBranchId) attendedNewbies.add(v.clientId);
+    }
+  });
+  const attendedNewbiesCount = attendedNewbies.size;
 
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
@@ -98,9 +110,9 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-  // Средний чек
-  const periodSales = branchSales.filter(s => inPeriod(s.date));
-  const factAvgCheck = periodSales.length > 0 ? Math.round(periodSales.reduce((s, x) => s + x.finalPrice, 0) / periodSales.length) : 0;
+  // Средний чек — только по абонементам
+  const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
+  const factAvgCheck = periodSubSales.length > 0 ? Math.round(periodSubSales.reduce((s, x) => s + x.finalPrice, 0) / periodSubSales.length) : 0;
   // Плановый средний чек считаем из плана продаж по абонементам: sum(target * price) / sum(target)
   const planAvgCheck = (() => {
     const plan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
@@ -143,7 +155,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         {[
           { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600' },
           { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500' },
-          { label: 'Дошло новичков', value: attendedMonth > 0 ? newClientsMonth : newClientsMonth, sub: 'зарегистрировано в этом месяце', icon: 'UserRound', color: 'text-blue-500' },
+          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500' },
           { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600' },
           { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground' },
         ].map((s, i) => (

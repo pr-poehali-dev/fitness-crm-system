@@ -659,6 +659,41 @@ export function useStore() {
     });
   };
 
+  const copyWeekSchedule = (fromDays: string[], toDays: string[]) => {
+    update(s => {
+      const fromEntries = s.schedule.filter(e => fromDays.includes(e.date) && e.branchId === s.currentBranchId);
+      const newEntries = fromEntries.map(e => {
+        const dayIndex = fromDays.indexOf(e.date);
+        return {
+          ...e,
+          id: genId(),
+          date: toDays[dayIndex] || e.date,
+          enrolledClientIds: [],
+        };
+      });
+      return { ...s, schedule: [...s.schedule, ...newEntries] };
+    });
+  };
+
+  const resetVisit = (visitId: string) => {
+    update(s => {
+      const visit = s.visits.find(v => v.id === visitId);
+      if (!visit || visit.status !== 'attended') return s;
+      let newSubs = s.subscriptions;
+      if (visit.subscriptionId) {
+        newSubs = s.subscriptions.map(sub => {
+          if (sub.id !== visit.subscriptionId || sub.sessionsLeft === 'unlimited') return sub;
+          return { ...sub, sessionsLeft: (sub.sessionsLeft as number) + 1 };
+        });
+      }
+      return {
+        ...s,
+        visits: s.visits.map(v => v.id === visitId ? { ...v, status: 'enrolled', subscriptionId: null, isSingleVisit: false, price: 0 } : v),
+        subscriptions: newSubs
+      };
+    });
+  };
+
   // Inquiries
   const addInquiry = (inquiry: Omit<Inquiry, 'id'>) => {
     update(s => ({ ...s, inquiries: [...s.inquiries, { ...inquiry, id: genId() }] }));
@@ -842,7 +877,7 @@ export function useStore() {
     addClient, updateClient,
     sellSubscription, sellSingleVisit,
     freezeSubscription, returnSubscription, updateSubscription,
-    addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit,
+    addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,
     addBranch, updateBranch, removeBranch,
     addHall, updateHall, removeHall,
     addTrainer, updateTrainer, removeTrainer,

@@ -24,12 +24,18 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('card');
 
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
+  // Поиск по имени — только свой филиал; по телефону (5+ цифр) — все филиалы
+  const isPhoneSearch = clientSearch.replace(/\D/g, '').length >= 5;
   const filteredClients = clientSearch
-    ? branchClients.filter(c => getClientFullName(c).toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch))
+    ? (isPhoneSearch
+        ? state.clients.filter(c => c.phone.replace(/\D/g, '').includes(clientSearch.replace(/\D/g, '')))
+        : branchClients.filter(c => getClientFullName(c).toLowerCase().includes(clientSearch.toLowerCase()))
+      )
     : branchClients.slice(0, 8);
 
   const selectedClient = state.clients.find(c => c.id === selectedClientId);
-  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
+  // Абонементы и разовые — все, не фильтруем по филиалу
+  const branchPlans = state.subscriptionPlans;
   const branchSinglePlans = state.singleVisitPlans.filter(p => p.branchId === state.currentBranchId);
   const items = selectedType === 'subscription' ? branchPlans : branchSinglePlans;
   const selectedItem = items.find(i => i.id === selectedItemId);

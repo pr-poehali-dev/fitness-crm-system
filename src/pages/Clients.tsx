@@ -310,17 +310,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
                 {CHANNELS.map(ch => <option key={ch} value={ch}>{ch}</option>)}
               </select>
             </div>
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Источник обращения</Label>
-              <select
-                value={form.referralSource}
-                onChange={e => setForm(f => ({ ...f, referralSource: e.target.value }))}
-                className="w-full border border-input rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="">Выберите...</option>
-                {REFERRALS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
+
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Рекламный источник</Label>
               <select

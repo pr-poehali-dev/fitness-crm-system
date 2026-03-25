@@ -597,44 +597,113 @@ export default function Reports({ store }: ReportsProps) {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
+    const margin = 8;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - margin * 2;
 
-    for (let idx = 0; idx < sections.length; idx++) {
-      const section = sections[idx];
-      if (idx > 0) doc.addPage();
-
-      // Build an offscreen HTML table
+    const renderSection = async (section: { title: string; rows: string[][] }) => {
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position:fixed;left:-9999px;top:-9999px;background:#fff;font-family:Arial,sans-serif;font-size:11px;';
-      const h3 = document.createElement('div');
-      h3.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:6px;padding:4px 0;';
-      h3.textContent = section.title;
-      wrapper.appendChild(h3);
+      wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;font-family:Arial,sans-serif;padding:8px;';
+
+      // title
+      const titleEl = document.createElement('div');
+      titleEl.style.cssText = 'font-weight:bold;font-size:14px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #1a1a1a;color:#1a1a1a;';
+      titleEl.textContent = section.title;
+      wrapper.appendChild(titleEl);
+
+      // meta line
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:11px;color:#666;margin-bottom:6px;';
+      meta.textContent = `Год: ${selectedYear}  |  Филиалы: ${branchLabel}  |  Дата выгрузки: ${new Date().toLocaleDateString('ru-RU')}`;
+      wrapper.appendChild(meta);
 
       const table = document.createElement('table');
-      table.style.cssText = 'border-collapse:collapse;width:100%;';
-      section.rows.forEach((row, ri) => {
+      table.style.cssText = 'border-collapse:collapse;width:100%;font-size:10px;';
+
+      const commentRows: string[][] = [];
+      const dataRows: string[][] = [];
+      section.rows.forEach(row => {
+        if (row[0] === 'Комментарий:') commentRows.push(row);
+        else dataRows.push(row);
+      });
+
+      dataRows.forEach((row, ri) => {
         const tr = document.createElement('tr');
-        tr.style.background = ri === 0 ? '#1a1a1a' : ri % 2 === 0 ? '#f8f8f8' : '#fff';
-        row.forEach(cell => {
-          const td = document.createElement(ri === 0 ? 'th' : 'td');
-          td.style.cssText = `border:1px solid #ddd;padding:3px 5px;text-align:left;white-space:nowrap;color:${ri === 0 ? '#fff' : '#000'};font-size:10px;`;
-          td.textContent = cell;
+        const isHeader = ri === 0;
+        const isTotalRow = row[0]?.startsWith('Итого');
+        tr.style.cssText = `background:${isHeader ? '#1a1a1a' : isTotalRow ? '#e8f4e8' : ri % 2 === 0 ? '#f8f8f8' : '#fff'};`;
+        row.forEach((cell, ci) => {
+          const td = document.createElement(isHeader ? 'th' : 'td');
+          const isNum = !isNaN(Number(cell.replace(/[₽%\s]/g, ''))) && cell !== '' && ci > 0;
+          td.style.cssText = [
+            'border:1px solid #ddd',
+            'padding:4px 6px',
+            `text-align:${ci === 0 ? 'left' : 'right'}`,
+            `color:${isHeader ? '#fff' : isTotalRow ? '#166534' : '#111'}`,
+            `font-weight:${isHeader || isTotalRow ? 'bold' : 'normal'}`,
+            'white-space:nowrap',
+            `font-size:${isHeader ? '10px' : '9.5px'}`,
+          ].join(';');
+          // форматируем числа
+          if (isNum && !isHeader) {
+            const num = Number(cell);
+            if (cell.includes('.')) td.textContent = num.toFixed(1);
+            else td.textContent = num.toLocaleString('ru-RU');
+          } else {
+            td.textContent = cell;
+          }
           tr.appendChild(td);
         });
         table.appendChild(tr);
       });
       wrapper.appendChild(table);
+
+      // comments
+      if (commentRows.length > 0) {
+        const commentBox = document.createElement('div');
+        commentBox.style.cssText = 'margin-top:10px;padding:8px 12px;background:#fff8e1;border-left:3px solid #f59e0b;font-size:11px;color:#92400e;border-radius:4px;';
+        commentBox.innerHTML = `<strong>Комментарий:</strong> ${commentRows.map(r => r[1]).join(' ')}`;
+        wrapper.appendChild(commentBox);
+      }
+
       document.body.appendChild(wrapper);
-
-      const canvas = await html2canvas(wrapper, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true });
+      const canvas = await html2canvas(wrapper, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
       document.body.removeChild(wrapper);
+      return canvas;
+    };
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.9);
-      const imgW = pageW - 10;
-      const imgH = (canvas.height / canvas.width) * imgW;
-      const maxH = pageH - 10;
-      const finalH = Math.min(imgH, maxH);
-      doc.addImage(imgData, 'JPEG', 5, 5, imgW, finalH);
+    let firstPage = true;
+    for (const section of sections) {
+      const canvas = await renderSection(section);
+      const imgRatio = canvas.height / canvas.width;
+      const imgW = usableW;
+      const imgH = imgRatio * imgW;
+
+      if (imgH <= usableH) {
+        // fits on one page
+        if (!firstPage) doc.addPage();
+        doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgW, imgH);
+      } else {
+        // split across pages
+        const scale = usableW / canvas.width;
+        const rowH = usableH / scale;
+        let offsetPx = 0;
+        while (offsetPx < canvas.height) {
+          if (!firstPage) doc.addPage();
+          const sliceH = Math.min(rowH, canvas.height - offsetPx);
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = sliceH;
+          const sCtx = sliceCanvas.getContext('2d')!;
+          sCtx.drawImage(canvas, 0, -offsetPx);
+          const sliceImgH = sliceH * scale;
+          doc.addImage(sliceCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgW, sliceImgH);
+          offsetPx += sliceH;
+          firstPage = false;
+        }
+        continue;
+      }
+      firstPage = false;
     }
 
     doc.save(`otchety-${selectedYear}-${branchLabel}.pdf`);
