@@ -338,18 +338,140 @@ export default function Reports({ store }: ReportsProps) {
   };
 
   const exportAll = () => {
-    const commentRows: string[][] = [
-      ['Раздел', 'Комментарий'],
-      ['План / Факт', comments.planfact || ''],
-      ['Расходы', comments.expenses || ''],
-      ['Продажи', comments.sales || ''],
-    ];
-    downloadCSV(`comments-${selectedYear}-${branchLabel}.csv`, commentRows);
-    setTimeout(() => exportPlanFact('plan'), 300);
-    setTimeout(() => exportPlanFact('fact'), 600);
-    setTimeout(() => exportExpenses('plan'), 900);
-    setTimeout(() => exportExpenses('fact'), 1200);
-    setTimeout(() => exportSales(), 1500);
+    const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+    const inM = (date: string, month: string) => {
+      const [y, mo] = month.split('-').map(Number);
+      const d = new Date(date);
+      return d.getFullYear() === y && d.getMonth() + 1 === mo;
+    };
+
+    const allRows: string[][] = [];
+    const sep = () => { allRows.push([]); };
+
+    // === ПЛАН/ФАКТ — ПЛАН ===
+    allRows.push([`=== ПЛАН / ФАКТ — ПЛАН (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Месяц', ...COLUMNS.map(c => c.label)]);
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      COLUMNS.forEach(col => {
+        const val = plansMap[month]?.[col.key] as number | undefined;
+        row.push(val !== undefined && !isNaN(val as number) ? String(val) : '');
+      });
+      allRows.push(row);
+    });
+    const pTotRow = ['Итого год'];
+    COLUMNS.forEach(col => {
+      const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+      const total = col.format === 'pct' || col.key === 'avgCheck'
+        ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0)
+        : vals.reduce((a, b) => a + b, 0);
+      pTotRow.push(vals.length > 0 ? String(Math.round(total * 100) / 100) : '');
+    });
+    allRows.push(pTotRow);
+    if (comments.planfact) { sep(); allRows.push(['Комментарий:', comments.planfact]); }
+    sep(); sep();
+
+    // === ПЛАН/ФАКТ — ФАКТ ===
+    allRows.push([`=== ПЛАН / ФАКТ — ФАКТ (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Месяц', ...COLUMNS.map(c => c.label)]);
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      COLUMNS.forEach(col => {
+        const val = factsMap[month]?.[col.key] as number | undefined;
+        row.push(val !== undefined && !isNaN(val as number) ? String(val) : '');
+      });
+      allRows.push(row);
+    });
+    const fTotRow = ['Итого год'];
+    COLUMNS.forEach(col => {
+      const vals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
+      const total = col.format === 'pct' || col.key === 'avgCheck'
+        ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0)
+        : vals.reduce((a, b) => a + b, 0);
+      fTotRow.push(String(Math.round(total * 100) / 100));
+    });
+    allRows.push(fTotRow);
+    sep(); sep();
+
+    // === РАСХОДЫ — ПЛАН ===
+    const branchCats = state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId));
+    allRows.push([`=== РАСХОДЫ — ПЛАН (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Категория', ...MONTH_NAMES, 'Итого год']);
+    branchCats.forEach(cat => {
+      const row = [cat.name];
+      let yearTotal = 0;
+      months.forEach(month => {
+        const val = state.expensePlans.find(ep => ep.month === month && ep.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(ep.branchId)))?.planAmount ?? 0;
+        yearTotal += val;
+        row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(yearTotal));
+      allRows.push(row);
+    });
+    if (comments.expenses) { sep(); allRows.push(['Комментарий:', comments.expenses]); }
+    sep(); sep();
+
+    // === РАСХОДЫ — ФАКТ ===
+    allRows.push([`=== РАСХОДЫ — ФАКТ (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Категория', ...MONTH_NAMES, 'Итого год']);
+    branchCats.forEach(cat => {
+      const row = [cat.name];
+      let yearTotal = 0;
+      months.forEach(month => {
+        const [year, mon] = month.split('-').map(Number);
+        const val = state.expenses.filter(e => {
+          const d = new Date(e.date);
+          return d.getFullYear() === year && d.getMonth() + 1 === mon && e.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(e.branchId));
+        }).reduce((s, e) => s + e.amount, 0);
+        yearTotal += val;
+        row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(yearTotal));
+      allRows.push(row);
+    });
+    sep(); sep();
+
+    // === ПРОДАЖИ — АБОНЕМЕНТЫ ===
+    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
+    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+    allRows.push([`=== ПРОДАЖИ — АБОНЕМЕНТЫ (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Месяц', ...subPlans.map(p => p.name + ' (кол-во)'), ...subPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма']);
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      let totalCnt = 0, totalSum = 0;
+      subPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        row.push(String(sales.length)); totalCnt += sales.length;
+      });
+      subPlans.forEach(plan => {
+        const sum = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)).reduce((s, x) => s + x.finalPrice, 0);
+        row.push(String(sum)); totalSum += sum;
+      });
+      row.push(String(totalCnt), String(totalSum));
+      allRows.push(row);
+    });
+    sep(); sep();
+
+    // === ПРОДАЖИ — ДОП. ПРОДАЖИ ===
+    allRows.push([`=== ПРОДАЖИ — ДОП. ПРОДАЖИ (${selectedYear}, ${branchLabel}) ===`]);
+    allRows.push(['Месяц', ...addPlans.map(p => p.name + ' (кол-во)'), ...addPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма']);
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      let totalCnt = 0, totalSum = 0;
+      addPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        row.push(String(sales.length)); totalCnt += sales.length;
+      });
+      addPlans.forEach(plan => {
+        const sum = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)).reduce((s, x) => s + x.finalPrice, 0);
+        row.push(String(sum)); totalSum += sum;
+      });
+      row.push(String(totalCnt), String(totalSum));
+      allRows.push(row);
+    });
+    if (comments.sales) { sep(); allRows.push(['Комментарий:', comments.sales]); }
+
+    downloadCSV(`otchety-${selectedYear}-${branchLabel}.csv`, allRows);
   };
 
   return (

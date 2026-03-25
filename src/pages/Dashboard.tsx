@@ -139,9 +139,10 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       </div>
 
       {/* Key stats: в нужном порядке */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-6 gap-4">
         {[
-          { label: 'Обращений', value: totalInquiries, sub: `записей на 1-ю тренировку: ${firstEnrollmentsCount}`, icon: 'PhoneIncoming', color: 'text-violet-600' },
+          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600' },
+          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500' },
           { label: 'Дошло новичков', value: attendedMonth > 0 ? newClientsMonth : newClientsMonth, sub: 'зарегистрировано в этом месяце', icon: 'UserRound', color: 'text-blue-500' },
           { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600' },
           { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground' },
