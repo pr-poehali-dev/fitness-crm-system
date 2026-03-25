@@ -98,6 +98,12 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
+  // Средний чек
+  const periodSales = branchSales.filter(s => inPeriod(s.date));
+  const factAvgCheck = periodSales.length > 0 ? Math.round(periodSales.reduce((s, x) => s + x.finalPrice, 0) / periodSales.length) : 0;
+  const planAvgCheck = state.monthlyPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth)?.plan?.avgCheck ?? 0;
+  const avgCheckPct = planAvgCheck > 0 ? Math.round((factAvgCheck / planAvgCheck) * 100) : null;
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Period selector */}
@@ -120,7 +126,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       </div>
 
       {/* Key stats: в нужном порядке */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         {[
           { label: 'Обращений', value: totalInquiries, sub: `записей на 1-ю тренировку: ${firstEnrollmentsCount}`, icon: 'PhoneIncoming', color: 'text-violet-600' },
           { label: 'Дошло новичков', value: attendedMonth > 0 ? newClientsMonth : newClientsMonth, sub: 'зарегистрировано в этом месяце', icon: 'UserRound', color: 'text-blue-500' },
@@ -136,6 +142,26 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>
           </div>
         ))}
+        {/* Средний чек */}
+        <div className="stat-card">
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">Средний чек</span>
+            <Icon name="Banknote" size={16} className="text-amber-500" />
+          </div>
+          <div className="text-2xl font-semibold">{factAvgCheck > 0 ? factAvgCheck.toLocaleString('ru-RU') + ' ₽' : '—'}</div>
+          {planAvgCheck > 0 ? (
+            <div className="text-xs text-muted-foreground mt-1">
+              план {planAvgCheck.toLocaleString('ru-RU')} ₽
+              {avgCheckPct !== null && (
+                <span className={`ml-1.5 font-medium ${avgCheckPct >= 100 ? 'text-green-600' : 'text-red-500'}`}>
+                  {avgCheckPct}%
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground mt-1">план не задан</div>
+          )}
+        </div>
       </div>
 
       {/* Sales plan table */}
