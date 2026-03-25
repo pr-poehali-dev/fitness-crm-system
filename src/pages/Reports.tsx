@@ -235,76 +235,98 @@ export default function Reports({ store }: ReportsProps) {
         </div>
       </div>
 
-      {/* Легенда */}
-      <div className="flex items-center gap-6 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-50 border border-blue-200 inline-block" />План</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-white border border-border inline-block" />Факт</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200 inline-block" />Отклонение</span>
+      {/* Таблица ПЛАН */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">План</h2>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-blue-50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[110px] z-10">
+                    Месяц
+                  </th>
+                  {COLUMNS.map(col => (
+                    <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((month, i) => (
+                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground"
+                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {MONTH_NAMES[i]}
+                    </td>
+                    {COLUMNS.map(col => {
+                      const planVal = plansMap[month]?.[col.key] as number | undefined;
+                      return (
+                        <td key={col.key} className="px-3 py-2 text-center text-blue-700">
+                          {planVal !== undefined ? fmt(planVal, col.format) : '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      {/* Таблица */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-secondary/50">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[180px] z-10">
-                  Показатель
-                </th>
-                {months.map((month, i) => (
-                  <th key={month} className="px-3 py-3 font-medium text-center min-w-[140px]">
-                    {MONTH_NAMES[i]}
+      {/* Таблица ФАКТ */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">Факт</h2>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[110px] z-10">
+                    Месяц
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {COLUMNS.map((col, ci) => (
-                <tr key={col.key} className={`border-b border-border/50 ${ci % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                  <td className="px-4 py-1.5 font-medium sticky left-0 z-10 text-muted-foreground"
-                    style={{ background: ci % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                    {col.label}
-                  </td>
-                  {months.map(month => {
-                    const factVal = factsMap[month]?.[col.key] as number | undefined;
-                    const planVal = plansMap[month]?.[col.key] as number | undefined;
-                    const d = diff(factVal, planVal);
-                    return (
-                      <td key={month} className="px-3 py-1.5">
-                        <div className="space-y-0.5">
-                          {/* План */}
-                          <div className="bg-blue-50 border border-blue-100 rounded px-2 py-0.5 text-center text-blue-700">
-                            {planVal !== undefined ? fmt(planVal, col.format) : '—'}
-                          </div>
-                          {/* Факт */}
-                          <div className="bg-white border border-border rounded px-2 py-0.5 text-center font-medium">
-                            {fmt(factVal, col.format)}
-                          </div>
-                          {/* Отклонение */}
+                  {COLUMNS.map(col => (
+                    <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((month, i) => (
+                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground"
+                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {MONTH_NAMES[i]}
+                    </td>
+                    {COLUMNS.map(col => {
+                      const factVal = factsMap[month]?.[col.key] as number | undefined;
+                      const planVal = plansMap[month]?.[col.key] as number | undefined;
+                      const d = diff(factVal, planVal);
+                      return (
+                        <td key={col.key} className="px-3 py-2 text-center">
+                          <div className="font-medium">{fmt(factVal, col.format)}</div>
                           {d !== null && (
-                            <div className={`rounded px-2 py-0.5 text-center text-xs ${
-                              d.val >= 0
-                                ? 'bg-green-50 border border-green-100 text-green-700'
-                                : 'bg-red-50 border border-red-100 text-red-700'
-                            }`}>
-                              {d.val >= 0 ? '+' : ''}{fmt(d.val, col.format)}
-                              {' '}({d.pct >= 0 ? '+' : ''}{d.pct.toFixed(0)}%)
+                            <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
                             </div>
                           )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Зелёное отклонение = факт превышает план. Красное = не выполнено.
-        Для заполнения плановых значений — раздел «Настройки» → «Планирование».
+        В таблице «Факт» под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
+        Плановые значения задаются в «Настройки» → «Планирование».
       </p>
     </div>
   );
