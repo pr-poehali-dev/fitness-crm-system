@@ -192,6 +192,14 @@ export interface MonthlyPlan {
   plan: Partial<MonthlyPlanRow>;
 }
 
+export interface ExpensePlan {
+  id: string;
+  branchId: string;
+  month: string; // YYYY-MM
+  categoryId: string;
+  planAmount: number;
+}
+
 export type StaffRole = 'director' | 'manager' | 'admin' | 'trainer' | 'marketer';
 
 export interface Permission {
@@ -405,6 +413,7 @@ export interface AppState {
   expenses: Expense[];
   salesPlans: SalesPlan[];
   monthlyPlans: MonthlyPlan[];
+  expensePlans: ExpensePlan[];
   staff: StaffMember[];
   currentStaffId: string;
   contactChannels: string[];
@@ -448,6 +457,7 @@ const initialState: AppState = {
   expenses: defaultExpenses,
   salesPlans: [],
   monthlyPlans: [],
+  expensePlans: [],
   staff: defaultStaff,
   currentStaffId: 'st1',
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
@@ -618,6 +628,17 @@ export function useStore() {
     update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
   };
 
+  // Expense Plans (план расходов по категориям)
+  const setExpensePlan = (branchId: string, month: string, categoryId: string, planAmount: number) => {
+    update(s => {
+      const existing = s.expensePlans.find(p => p.branchId === branchId && p.month === month && p.categoryId === categoryId);
+      if (existing) {
+        return { ...s, expensePlans: s.expensePlans.map(p => p.branchId === branchId && p.month === month && p.categoryId === categoryId ? { ...p, planAmount } : p) };
+      }
+      return { ...s, expensePlans: [...s.expensePlans, { id: genId(), branchId, month, categoryId, planAmount }] };
+    });
+  };
+
   // Monthly Plans (план/факт)
   const setMonthlyPlan = (branchId: string, month: string, plan: Partial<MonthlyPlanRow>) => {
     update(s => {
@@ -769,7 +790,7 @@ export function useStore() {
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
-    setSalesPlan, setMonthlyPlan,
+    setSalesPlan, setMonthlyPlan, setExpensePlan,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };

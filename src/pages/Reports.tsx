@@ -2,6 +2,11 @@ import { useState, useMemo } from 'react';
 import { StoreType, MonthlyPlanRow } from '@/store';
 import Icon from '@/components/ui/icon';
 
+function fmtMoney(val: number | undefined): string {
+  if (val === undefined || val === null || isNaN(val)) return '—';
+  return val.toLocaleString('ru-RU') + ' ₽';
+}
+
 interface ReportsProps {
   store: StoreType;
 }
@@ -328,6 +333,166 @@ export default function Reports({ store }: ReportsProps) {
         В таблице «Факт» под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
         Плановые значения задаются в «Настройки» → «Планирование».
       </p>
+
+      {/* РАЗДЕЛ: РАСХОДЫ */}
+      <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds} />
+    </div>
+  );
+}
+
+function ExpensesReport({ state, months, filterBranchIds }: {
+  state: StoreType['state'];
+  months: string[];
+  filterBranchIds: string[];
+}) {
+  const branchCategories = useMemo(() =>
+    state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId)),
+    [state.expenseCategories, filterBranchIds]
+  );
+
+  // Факт: расходы по категории и месяцу
+  const factMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    months.forEach(month => {
+      const [year, mon] = month.split('-').map(Number);
+      map[month] = {};
+      branchCategories.forEach(cat => {
+        const sum = state.expenses
+          .filter(e => {
+            const d = new Date(e.date);
+            return d.getFullYear() === year && d.getMonth() + 1 === mon &&
+              e.categoryId === cat.id &&
+              (filterBranchIds.length === 0 || filterBranchIds.includes(e.branchId));
+          })
+          .reduce((s, e) => s + e.amount, 0);
+        map[month][cat.id] = sum;
+      });
+    });
+    return map;
+  }, [months, branchCategories, state.expenses, filterBranchIds]);
+
+  // План: expensePlans по категории и месяцу
+  const planMap = useMemo(() => {
+    const map: Record<string, Record<string, number | undefined>> = {};
+    months.forEach(month => {
+      map[month] = {};
+      branchCategories.forEach(cat => {
+        const p = state.expensePlans.find(ep =>
+          ep.month === month && ep.categoryId === cat.id &&
+          (filterBranchIds.length === 0 || filterBranchIds.includes(ep.branchId))
+        );
+        map[month][cat.id] = p?.planAmount;
+      });
+    });
+    return map;
+  }, [months, branchCategories, state.expensePlans, filterBranchIds]);
+
+  if (branchCategories.length === 0) {
+    return (
+      <div className="pt-4 border-t border-border">
+        <h2 className="text-lg font-semibold mb-1">Расходы</h2>
+        <p className="text-sm text-muted-foreground">Нет категорий расходов для выбранных филиалов.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-4 border-t border-border space-y-6">
+      <h2 className="text-lg font-semibold">Расходы по категориям</h2>
+
+      {/* ПЛАН расходов */}
+      <div>
+        <h3 className="text-base font-semibold mb-3">План</h3>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-blue-50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[100px] z-10">Месяц</th>
+                  {branchCategories.map(cat => (
+                    <th key={cat.id} className="px-3 py-3 font-medium text-center whitespace-nowrap text-blue-800">{cat.name}</th>
+                  ))}
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap text-blue-800">Итого</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((month, i) => {
+                  const total = branchCategories.reduce((sum, cat) => sum + (planMap[month][cat.id] ?? 0), 0);
+                  return (
+                    <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-blue-50/30'}`}>
+                      <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
+                        style={{ background: i % 2 === 0 ? 'white' : 'rgb(239 246 255 / 0.5)' }}>
+                        {MONTH_NAMES[i]}
+                      </td>
+                      {branchCategories.map(cat => (
+                        <td key={cat.id} className="px-3 py-2 text-center text-blue-700">
+                          {fmtMoney(planMap[month][cat.id])}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-center font-semibold text-blue-800">
+                        {total > 0 ? fmtMoney(total) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ФАКТ расходов */}
+      <div>
+        <h3 className="text-base font-semibold mb-3">Факт</h3>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
+                  {branchCategories.map(cat => (
+                    <th key={cat.id} className="px-3 py-3 font-medium text-center whitespace-nowrap">{cat.name}</th>
+                  ))}
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap">Итого</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((month, i) => {
+                  const total = branchCategories.reduce((sum, cat) => sum + (factMap[month][cat.id] ?? 0), 0);
+                  return (
+                    <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                      <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
+                        style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                        {MONTH_NAMES[i]}
+                      </td>
+                      {branchCategories.map(cat => {
+                        const fact = factMap[month][cat.id] ?? 0;
+                        const plan = planMap[month][cat.id];
+                        const pct = plan && plan > 0 ? ((fact - plan) / plan) * 100 : null;
+                        return (
+                          <td key={cat.id} className="px-3 py-2 text-center">
+                            <span className="font-medium">{fmtMoney(fact)}</span>
+                            {pct !== null && (
+                              <span className={`ml-1 text-[10px] ${pct <= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center font-semibold">{fmtMoney(total)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          В таблице «Факт» для расходов: зелёный % = потратили меньше плана (хорошо), красный % = превысили план.
+          Плановые значения по категориям задаются в «Настройки» → «Расходы (план)».
+        </p>
+      </div>
     </div>
   );
 }
