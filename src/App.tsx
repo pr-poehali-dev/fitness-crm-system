@@ -24,13 +24,37 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadAuth());
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const savedId = loadAuth();
+    if (!savedId) return false;
+    // Проверяем что сотрудник есть в store
+    try {
+      const raw = localStorage.getItem('fitcrm_state_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.staff && parsed.staff.find((s: { id: string }) => s.id === savedId)) return true;
+        return false;
+      }
+    } catch { /* ignore */ }
+    // Если нет state в localStorage — дефолтные сотрудники
+    const defaultIds = ['st1', 'st2', 'st3'];
+    return defaultIds.includes(savedId);
+  });
 
   useEffect(() => {
     const savedStaffId = loadAuth();
     if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
       store.setCurrentStaff(savedStaffId);
+      setIsAuthenticated(true);
+    } else if (savedStaffId) {
+      clearAuth();
+      setIsAuthenticated(false);
     }
+  }, [store.state.staff.length]);
+
+  // Автоматически активировать pending абонементы при загрузке
+  useEffect(() => {
+    store.autoActivatePendingSubscriptions();
   }, []);
 
   const handleLogin = (staffId: string) => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StoreType, ScheduleEntry } from '@/store';
+import { StoreType, ScheduleEntry, Client } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const NO_HALL_ID = '__no_hall__';
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
-  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule } = store;
+  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch } = store;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHallId, setSelectedHallId] = useState<string>(NO_HALL_ID);
@@ -155,12 +155,39 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     setEditForm({});
   };
 
-  const filteredClients = state.clients.filter(c =>
-    c.branchId === state.currentBranchId &&
-    selectedEntry && !selectedEntry.enrolledClientIds.includes(c.id) &&
-    !selectedEntry.isPersonal &&
-    `${c.lastName} ${c.firstName} ${c.phone}`.toLowerCase().includes(enrollSearch.toLowerCase())
-  );
+  // Поиск клиента: по телефону (5+ цифр) — все филиалы, иначе — только текущий
+  const enrollIsPhoneSearch = enrollSearch.replace(/\D/g, '').length >= 5;
+  const filteredClients: (Client & { isOtherBranch?: boolean })[] = selectedEntry && !selectedEntry.isPersonal
+    ? (enrollIsPhoneSearch
+        ? state.clients
+            .filter(c => c.phone.replace(/\D/g, '').includes(enrollSearch.replace(/\D/g, '')) && !selectedEntry.enrolledClientIds.includes(c.id))
+            .map(c => ({ ...c, isOtherBranch: c.branchId !== state.currentBranchId }))
+        : state.clients.filter(c =>
+            c.branchId === state.currentBranchId &&
+            !selectedEntry.enrolledClientIds.includes(c.id) &&
+            `${c.lastName} ${c.firstName} ${c.phone}`.toLowerCase().includes(enrollSearch.toLowerCase())
+          )
+      )
+    : [];
+
+  // Записать клиента (возможно из другого филиала) на тренировку
+  const enrollClientMaybeOtherBranch = (entryId: string, clientId: string) => {
+    const client = state.clients.find(c => c.id === clientId);
+    if (client && client.branchId !== state.currentBranchId) {
+      // Клиент из другого филиала — добавляем в текущий (синхронно через store не получить новый id, поэтому добавляем и сразу ищем)
+      addClientToBranch(clientId, state.currentBranchId);
+      setTimeout(() => {
+        const newClient = state.clients.find(c =>
+          c.phone.replace(/\D/g, '') === client.phone.replace(/\D/g, '') &&
+          c.branchId === state.currentBranchId
+        );
+        if (newClient) enrollClient(entryId, newClient.id);
+        else enrollClient(entryId, clientId);
+      }, 30);
+    } else {
+      enrollClient(entryId, clientId);
+    }
+  };
 
   const openAttendModal = (clientId: string, entryId: string) => {
     const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
@@ -217,7 +244,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     if (!entry || !client) return { subscriptions: [], singles: [] };
     const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
     const activeSubs = state.subscriptions.filter(s =>
-      s.clientId === clientId && s.status === 'active' &&
+      s.clientId === clientId && (s.status === 'active' || s.status === 'pending') &&
       (s.sessionsLeft === 'unlimited' || (s.sessionsLeft as number) > 0)
     ).filter(s => {
       const plan = state.subscriptionPlans.find(p => p.id === s.planId);
@@ -453,77 +480,116 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
           </div>
         </div>
 
-        {/* Week grid — original card style */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-7 gap-2">
-            {weekDays.map(dateStr => {
-              const { weekday, date, month, isToday } = formatDayHeader(dateStr);
-              const dayEntries = state.schedule
-                .filter(e =>
-                  e.branchId === state.currentBranchId &&
-                  e.date === dateStr &&
-                  filterEntry(e)
-                )
-                .sort((a, b) => a.time.localeCompare(b.time));
-              return (
-                <div key={dateStr} className="flex flex-col">
-                  <div className={`text-center py-2 px-1 rounded-xl mb-2 shrink-0 ${isToday ? 'bg-foreground text-primary-foreground' : 'bg-white border border-border'}`}>
-                    <div className="text-xs capitalize opacity-70">{weekday}</div>
-                    <div className="text-lg font-bold leading-tight">{date}</div>
-                    <div className="text-xs opacity-60">{month}</div>
-                  </div>
-                  <div className="space-y-1.5">
-                    {dayEntries.map(entry => {
-                      const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
-                      const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
-                      const isSelected = selectedEntryId === entry.id;
-                      const fillPct = entry.maxCapacity > 0 ? (entry.enrolledClientIds.length / entry.maxCapacity) * 100 : 0;
-                      const hall = entry.hallId ? state.halls.find(h => h.id === entry.hallId) : null;
-                      const personalClient = entry.isPersonal && entry.personalClientId
-                        ? state.clients.find(c => c.id === entry.personalClientId) : null;
+        {/* Week grid — time rows × day columns */}
+        <div className="flex-1 overflow-auto">
+          {(() => {
+            const allWeekEntries = state.schedule.filter(e =>
+              e.branchId === state.currentBranchId &&
+              weekDays.includes(e.date) &&
+              filterEntry(e)
+            );
+            const uniqueTimes = [...new Set(allWeekEntries.map(e => e.time))].sort();
+            return (
+              <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 52 }} />
+                  {weekDays.map(d => <col key={d} />)}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="sticky top-0 z-20 bg-secondary/90 border-b border-border" style={{ width: 52 }} />
+                    {weekDays.map(dateStr => {
+                      const { weekday, date, month, isToday } = formatDayHeader(dateStr);
                       return (
-                        <div
-                          key={entry.id}
-                          onClick={() => setSelectedEntryId(entry.id === selectedEntryId ? null : entry.id)}
-                          className={`rounded-lg p-2 cursor-pointer transition-all border ${isSelected ? 'border-foreground shadow-sm' : 'border-transparent hover:border-border'}`}
-                          style={{ background: color + '18', borderLeftColor: color, borderLeftWidth: 3 }}
-                        >
-                          <div className="text-xs font-semibold" style={{ color }}>{entry.time}</div>
-                          {entry.isPersonal ? (
-                            <>
-                              <div className="text-xs font-medium text-foreground leading-tight mt-0.5 truncate">
-                                {personalClient ? `${personalClient.lastName} ${personalClient.firstName}` : 'Персональная'}
-                              </div>
-                              <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                                {state.trainers.find(t => t.id === entry.trainerId)?.name}
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className="text-xs font-medium text-foreground leading-tight mt-0.5 truncate">{tt?.name}</div>
-                              <div className="text-xs text-muted-foreground mt-0.5">{entry.enrolledClientIds.length}/{entry.maxCapacity}</div>
-                              <div className="w-full h-1 bg-white/50 rounded-full mt-1 overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${fillPct}%`, background: color }} />
-                              </div>
-                            </>
-                          )}
-                          {hall && (
-                            <div className="text-xs text-muted-foreground mt-0.5 truncate opacity-70">{hall.name}</div>
-                          )}
-                        </div>
+                        <th key={dateStr} className="sticky top-0 z-20 bg-secondary/90 border-b border-border px-1 pb-2 pt-1">
+                          <div className={`text-center py-1.5 px-1 rounded-xl ${isToday ? 'bg-foreground text-primary-foreground' : ''}`}>
+                            <div className="text-xs capitalize opacity-70">{weekday}</div>
+                            <div className="text-sm font-bold leading-tight">{date}</div>
+                            <div className="text-xs opacity-60">{month}</div>
+                          </div>
+                        </th>
                       );
                     })}
-                    <button
-                      onClick={() => openAddFor(dateStr)}
-                      className="w-full py-1.5 rounded-lg border border-dashed border-border hover:bg-secondary transition-colors"
-                    >
-                      <Icon name="Plus" size={14} className="mx-auto text-muted-foreground" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uniqueTimes.map(time => (
+                    <tr key={time} className="group border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                      <td className="text-center align-top pt-2 pb-1 text-xs font-semibold text-muted-foreground select-none sticky left-0 bg-background group-hover:bg-secondary/20 z-10 border-r border-border/30" style={{ width: 52 }}>
+                        {time}
+                      </td>
+                      {weekDays.map(dateStr => {
+                        const cellEntries = allWeekEntries.filter(e => e.date === dateStr && e.time === time);
+                        return (
+                          <td key={dateStr} className="align-top px-1 py-1 min-w-0">
+                            <div className="space-y-1">
+                              {cellEntries.map(entry => {
+                                const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
+                                const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
+                                const isSelected = selectedEntryId === entry.id;
+                                const fillPct = entry.maxCapacity > 0 ? (entry.enrolledClientIds.length / entry.maxCapacity) * 100 : 0;
+                                const personalClient = entry.isPersonal && entry.personalClientId
+                                  ? state.clients.find(c => c.id === entry.personalClientId) : null;
+                                const trainerName = state.trainers.find(t => t.id === entry.trainerId)?.name || '';
+                                return (
+                                  <div
+                                    key={entry.id}
+                                    onClick={() => setSelectedEntryId(entry.id === selectedEntryId ? null : entry.id)}
+                                    className={`rounded-lg p-1.5 cursor-pointer transition-all border ${isSelected ? 'border-foreground shadow-sm' : 'border-transparent hover:border-border'}`}
+                                    style={{ background: color + '18', borderLeftColor: color, borderLeftWidth: 3 }}
+                                  >
+                                    {entry.isPersonal ? (
+                                      <>
+                                        <div className="text-xs font-medium text-foreground leading-tight truncate">
+                                          {personalClient ? `${personalClient.lastName} ${personalClient.firstName}` : 'Персональная'}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-0.5 truncate">{trainerName}</div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="text-xs font-medium text-foreground leading-tight truncate">{tt?.name}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5 truncate">{trainerName}</div>
+                                        <div className="text-xs text-muted-foreground">{entry.enrolledClientIds.length}/{entry.maxCapacity}</div>
+                                        <div className="w-full h-0.5 bg-white/50 rounded-full mt-1 overflow-hidden">
+                                          <div className="h-full rounded-full" style={{ width: `${fillPct}%`, background: color }} />
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              <button
+                                onClick={() => openAddFor(dateStr)}
+                                className="w-full py-1 rounded border border-dashed border-transparent hover:border-border hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <Icon name="Plus" size={12} className="mx-auto text-muted-foreground" />
+                              </button>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {/* Пустая строка для добавления — всегда видна */}
+                  <tr className="border-b border-border/30">
+                    <td className="py-2 text-center text-muted-foreground text-xs sticky left-0 bg-background border-r border-border/30" style={{ width: 52 }}>
+                      <Icon name="Clock" size={13} className="mx-auto opacity-40" />
+                    </td>
+                    {weekDays.map(dateStr => (
+                      <td key={dateStr} className="px-1 py-1">
+                        <button
+                          onClick={() => openAddFor(dateStr)}
+                          className="w-full py-2 rounded-lg border border-dashed border-border hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                        >
+                          <Icon name="Plus" size={13} className="mx-auto" />
+                        </button>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       </div>
 
@@ -681,10 +747,16 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                       {filteredClients.slice(0, 20).map(c => (
                         <button
                           key={c.id}
-                          onClick={() => enrollClient(selectedEntry.id, c.id)}
+                          onClick={() => enrollClientMaybeOtherBranch(selectedEntry.id, c.id)}
                           className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-secondary transition-colors"
                         >
-                          {c.lastName} {c.firstName} · <span className="text-muted-foreground">{c.phone}</span>
+                          <span>{c.lastName} {c.firstName}</span>
+                          {c.isOtherBranch && (
+                            <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                              {state.branches.find(b => b.id === c.branchId)?.name}
+                            </span>
+                          )}
+                          <span className="text-muted-foreground ml-1">· {c.phone}</span>
                         </button>
                       ))}
                       {filteredClients.length === 0 && enrollSearch && (
@@ -867,8 +939,15 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                         checked={selectedBasis?.type === 'subscription' && (selectedBasis as { type: 'subscription'; subId: string }).subId === sub.id}
                         onChange={() => setSelectedBasis({ type: 'subscription', subId: sub.id })} />
                       <div>
-                        <div className="text-sm font-medium">{sub.planName}</div>
-                        <div className="text-xs text-muted-foreground">до {sub.endDate} · {sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}</div>
+                        <div className="text-sm font-medium flex items-center gap-1.5">
+                          {sub.planName}
+                          {sub.status === 'pending' && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">активируется сейчас</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {sub.status === 'pending' ? `Начнёт действовать с сегодня · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}` : `до ${sub.endDate} · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}`}
+                        </div>
                       </div>
                     </label>
                   ))}
@@ -884,7 +963,21 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                     </label>
                   ))}
                   {subscriptions.length === 0 && singles.length === 0 && (
-                    <div className="text-sm text-muted-foreground text-center py-4">Нет доступных абонементов</div>
+                    <div className="text-center py-4">
+                      <div className="text-sm text-muted-foreground mb-3">Нет доступных абонементов или разовых</div>
+                      <Button
+                        onClick={() => {
+                          setAttendModal(null);
+                          setSelectedBasis(null);
+                          onSell?.(attendModal?.clientId);
+                        }}
+                        className="bg-foreground text-primary-foreground hover:opacity-90"
+                        size="sm"
+                      >
+                        <Icon name="ShoppingCart" size={14} className="mr-1.5" />
+                        Продать абонемент
+                      </Button>
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2 pt-1">

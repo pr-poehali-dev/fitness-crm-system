@@ -505,12 +505,13 @@ export default function Settings({ store }: SettingsProps) {
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [planForm, setPlanForm] = useState({
     name: '', price: 0, durationDays: 30, sessionsLimit: 8 as number | 'unlimited',
-    trainingTypeIds: [] as string[], allDirections: false, freezeDays: 7
+    trainingTypeIds: [] as string[], allDirections: false, freezeDays: 7,
+    autoActivateDays: '' as string | number,
   });
 
   const [showAddSingle, setShowAddSingle] = useState(false);
   const [editingSingle, setEditingSingle] = useState<SingleVisitPlan | null>(null);
-  const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[] });
+  const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[], autoActivateDays: '' as string | number });
 
   const [newChannel, setNewChannel] = useState('');
   const [editChannel, setEditChannel] = useState<{ old: string; val: string } | null>(null);
@@ -521,19 +522,20 @@ export default function Settings({ store }: SettingsProps) {
   const [editingExpCat, setEditingExpCat] = useState<ExpenseCategory | null>(null);
   const [expCatForm, setExpCatForm] = useState({ name: '' });
 
-  const tabs: { id: Tab; label: string; icon: string }[] = [
+  const allTabs: { id: Tab; label: string; icon: string; directorOnly?: boolean }[] = [
     { id: 'trainings', label: 'Тренировки', icon: 'Dumbbell' },
     { id: 'training-cats', label: 'Категории', icon: 'Tag' },
     { id: 'trainers', label: 'Тренеры', icon: 'User' },
     { id: 'halls', label: 'Залы', icon: 'DoorOpen' },
-    { id: 'plans', label: 'Абонементы', icon: 'CreditCard' },
-    { id: 'single', label: 'Разовые', icon: 'Ticket' },
-    { id: 'sources', label: 'Источники', icon: 'Megaphone' },
-    { id: 'expense-cats', label: 'Расходы', icon: 'TrendingDown' },
+    { id: 'plans', label: 'Абонементы', icon: 'CreditCard', directorOnly: true },
+    { id: 'single', label: 'Разовые', icon: 'Ticket', directorOnly: true },
+    { id: 'sources', label: 'Источники', icon: 'Megaphone', directorOnly: true },
+    { id: 'expense-cats', label: 'Расходы', icon: 'TrendingDown', directorOnly: true },
     { id: 'expense-plan', label: 'Расходы (план)', icon: 'ClipboardList' },
     { id: 'sales-plan', label: 'Продажи (план)', icon: 'ShoppingCart' },
     { id: 'planning', label: 'Планирование', icon: 'Target' },
   ];
+  const tabs = allTabs.filter(t => !t.directorOnly || isDirector);
 
   const toggleTT = (ids: string[], id: string, setter: (v: string[]) => void) => {
     setter(ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
@@ -578,23 +580,32 @@ export default function Settings({ store }: SettingsProps) {
     setShowAddHall(false);
   };
 
-  const openAddPlan = () => { setEditingPlan(null); setPlanForm({ name: '', price: 0, durationDays: 30, sessionsLimit: 8, trainingTypeIds: [], allDirections: false, freezeDays: 7 }); setShowAddPlan(true); };
-  const openEditPlan = (p: SubscriptionPlan) => { setEditingPlan(p); setPlanForm({ name: p.name, price: p.price, durationDays: p.durationDays, sessionsLimit: p.sessionsLimit, trainingTypeIds: p.trainingTypeIds, allDirections: p.allDirections, freezeDays: p.freezeDays }); setShowAddPlan(true); };
+  const openAddPlan = () => { setEditingPlan(null); setPlanForm({ name: '', price: 0, durationDays: 30, sessionsLimit: 8, trainingTypeIds: [], allDirections: false, freezeDays: 7, autoActivateDays: '' }); setShowAddPlan(true); };
+  const openEditPlan = (p: SubscriptionPlan) => { setEditingPlan(p); setPlanForm({ name: p.name, price: p.price, durationDays: p.durationDays, sessionsLimit: p.sessionsLimit, trainingTypeIds: p.trainingTypeIds, allDirections: p.allDirections, freezeDays: p.freezeDays, autoActivateDays: p.autoActivateDays ?? '' }); setShowAddPlan(true); };
   const handleSavePlan = () => {
     if (!planForm.name || planForm.price <= 0) return;
-    const data = { name: planForm.name, price: planForm.price, durationDays: planForm.durationDays, sessionsLimit: planForm.sessionsLimit, trainingTypeIds: planForm.allDirections ? [] : planForm.trainingTypeIds, allDirections: planForm.allDirections, freezeDays: planForm.freezeDays, branchId: state.currentBranchId };
-    if (editingPlan) updateSubscriptionPlan(editingPlan.id, data);
-    else addSubscriptionPlan(data);
+    const autoActivateDays = planForm.autoActivateDays !== '' && planForm.autoActivateDays !== null ? Number(planForm.autoActivateDays) : null;
+    const baseData = { name: planForm.name, price: planForm.price, durationDays: planForm.durationDays, sessionsLimit: planForm.sessionsLimit, trainingTypeIds: planForm.allDirections ? [] : planForm.trainingTypeIds, allDirections: planForm.allDirections, freezeDays: planForm.freezeDays, autoActivateDays };
+    if (editingPlan) {
+      updateSubscriptionPlan(editingPlan.id, { ...baseData, branchId: editingPlan.branchId });
+    } else {
+      // Дублируем на все филиалы
+      state.branches.forEach(branch => addSubscriptionPlan({ ...baseData, branchId: branch.id }));
+    }
     setShowAddPlan(false);
   };
 
-  const openAddSingle = () => { setEditingSingle(null); setSingleForm({ name: '', price: 0, trainingTypeIds: [] }); setShowAddSingle(true); };
-  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds }); setShowAddSingle(true); };
+  const openAddSingle = () => { setEditingSingle(null); setSingleForm({ name: '', price: 0, trainingTypeIds: [], autoActivateDays: '' }); setShowAddSingle(true); };
+  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds, autoActivateDays: p.autoActivateDays ?? '' }); setShowAddSingle(true); };
   const handleSaveSingle = () => {
     if (!singleForm.name || singleForm.price <= 0) return;
-    const data = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, branchId: state.currentBranchId };
-    if (editingSingle) updateSingleVisitPlan(editingSingle.id, data);
-    else addSingleVisitPlan(data);
+    const autoActivateDays = singleForm.autoActivateDays !== '' && singleForm.autoActivateDays !== null ? Number(singleForm.autoActivateDays) : null;
+    const baseData = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, autoActivateDays };
+    if (editingSingle) {
+      updateSingleVisitPlan(editingSingle.id, { ...baseData, branchId: editingSingle.branchId });
+    } else {
+      state.branches.forEach(branch => addSingleVisitPlan({ ...baseData, branchId: branch.id }));
+    }
     setShowAddSingle(false);
   };
 
@@ -602,10 +613,18 @@ export default function Settings({ store }: SettingsProps) {
   const openEditExpCat = (c: ExpenseCategory) => { setEditingExpCat(c); setExpCatForm({ name: c.name }); setShowAddExpCat(true); };
   const handleSaveExpCat = () => {
     if (!expCatForm.name) return;
-    if (editingExpCat) updateExpenseCategory(editingExpCat.id, { name: expCatForm.name });
-    else addExpenseCategory({ name: expCatForm.name, branchId: state.currentBranchId });
+    if (editingExpCat) {
+      updateExpenseCategory(editingExpCat.id, { name: expCatForm.name });
+    } else {
+      // Дублируем на все филиалы
+      state.branches.forEach(branch => addExpenseCategory({ name: expCatForm.name, branchId: branch.id }));
+    }
     setShowAddExpCat(false);
   };
+
+  // Проверка — является ли текущий сотрудник директором
+  const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
+  const isDirector = currentStaff?.role === 'director';
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -978,6 +997,11 @@ export default function Settings({ store }: SettingsProps) {
       <Dialog open={showAddPlan} onOpenChange={setShowAddPlan}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editingPlan ? 'Редактировать абонемент' : 'Новый абонемент'}</DialogTitle></DialogHeader>
+          {!editingPlan && state.branches.length > 1 && (
+            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 -mt-1 mb-1">
+              Абонемент будет создан для всех {state.branches.length} филиалов
+            </div>
+          )}
           <div className="space-y-4">
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
@@ -993,6 +1017,17 @@ export default function Settings({ store }: SettingsProps) {
                 </div>
               </div>
               <div><Label className="text-xs text-muted-foreground mb-1 block">Дней заморозки</Label><Input type="number" value={planForm.freezeDays} onChange={e => setPlanForm(f => ({ ...f, freezeDays: Number(e.target.value) }))} /></div>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Срок до автоактивации (дней)</Label>
+              <Input
+                type="number"
+                placeholder="Не задан (активируется сразу)"
+                value={planForm.autoActivateDays}
+                onChange={e => setPlanForm(f => ({ ...f, autoActivateDays: e.target.value }))}
+                min={1}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Если задать — абонемент начнёт действовать с первой тренировки. Если клиент не пришёл в течение этого срока — активируется автоматически.</p>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -1029,6 +1064,16 @@ export default function Settings({ store }: SettingsProps) {
           <div className="space-y-4">
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={singleForm.name} onChange={e => setSingleForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label className="text-xs text-muted-foreground mb-1 block">Цена ₽ *</Label><Input type="number" value={singleForm.price} onChange={e => setSingleForm(f => ({ ...f, price: Number(e.target.value) }))} /></div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Срок до автоактивации (дней)</Label>
+              <Input
+                type="number"
+                placeholder="Не задан (действует сразу)"
+                value={singleForm.autoActivateDays}
+                onChange={e => setSingleForm(f => ({ ...f, autoActivateDays: e.target.value }))}
+                min={1}
+              />
+            </div>
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Направления</Label>
               <div className="flex flex-wrap gap-2">

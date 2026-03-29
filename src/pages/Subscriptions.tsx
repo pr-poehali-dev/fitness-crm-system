@@ -12,10 +12,12 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
 
   const active = branchSubs.filter(s => s.status === 'active');
   const frozen = branchSubs.filter(s => s.status === 'frozen');
+  const pending = branchSubs.filter(s => s.status === 'pending');
   const expired = branchSubs.filter(s => s.status === 'expired' || (s.status === 'active' && s.endDate < new Date().toISOString().split('T')[0]));
 
   const statusColor = (status: string, endDate: string) => {
     if (status === 'frozen') return 'text-blue-600 bg-blue-50 border-blue-200';
+    if (status === 'pending') return 'text-amber-600 bg-amber-50 border-amber-200';
     if (status === 'returned') return 'text-muted-foreground bg-secondary border-border';
     if (endDate < new Date().toISOString().split('T')[0]) return 'text-red-600 bg-red-50 border-red-200';
     const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -23,8 +25,9 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
     return 'text-green-600 bg-green-50 border-green-200';
   };
 
-  const statusLabel = (status: string, endDate: string) => {
+  const statusLabel = (status: string, endDate: string, autoActivateDate?: string | null) => {
     if (status === 'frozen') return '❄️ Заморожен';
+    if (status === 'pending') return autoActivateDate ? `⏳ до ${autoActivateDate}` : '⏳ Ожидание';
     if (status === 'returned') return '↩ Возврат';
     if (endDate < new Date().toISOString().split('T')[0]) return 'Истёк';
     const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -34,7 +37,7 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="stat-card">
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Активных</div>
           <div className="text-2xl font-semibold text-green-600">{active.length}</div>
@@ -42,6 +45,10 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
         <div className="stat-card">
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Заморожено</div>
           <div className="text-2xl font-semibold text-blue-600">{frozen.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Ожидание</div>
+          <div className="text-2xl font-semibold text-amber-600">{pending.length}</div>
         </div>
         <div className="stat-card">
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Истекших</div>
@@ -73,7 +80,7 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
             {branchSubs.map(sub => {
               const client = state.clients.find(c => c.id === sub.clientId);
               const sc = statusColor(sub.status, sub.endDate);
-              const sl = statusLabel(sub.status, sub.endDate);
+              const sl = statusLabel(sub.status, sub.endDate, sub.autoActivateDate);
               return (
                 <tr key={sub.id}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>

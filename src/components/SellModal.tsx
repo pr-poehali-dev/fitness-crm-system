@@ -14,7 +14,7 @@ interface SellModalProps {
 }
 
 export default function SellModal({ open, onClose, store, preselectedClientId }: SellModalProps) {
-  const { state, sellSubscription, sellSingleVisit, getClientFullName } = store;
+  const { state, sellSubscription, sellSingleVisit, getClientFullName, addClientToBranch } = store;
   const [step, setStep] = useState<'client' | 'product' | 'confirm'>('client');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClientId, setSelectedClientId] = useState(preselectedClientId || '');
@@ -34,8 +34,7 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
     : branchClients.slice(0, 8);
 
   const selectedClient = state.clients.find(c => c.id === selectedClientId);
-  // Абонементы и разовые — все, не фильтруем по филиалу
-  const branchPlans = state.subscriptionPlans;
+  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
   const branchSinglePlans = state.singleVisitPlans.filter(p => p.branchId === state.currentBranchId);
   const items = selectedType === 'subscription' ? branchPlans : branchSinglePlans;
   const selectedItem = items.find(i => i.id === selectedItemId);
@@ -44,6 +43,11 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
 
   const handleConfirm = () => {
     if (!selectedClientId || !selectedItemId) return;
+    // Если клиент из другого филиала — добавляем в текущий
+    const client = state.clients.find(c => c.id === selectedClientId);
+    if (client && client.branchId !== state.currentBranchId) {
+      addClientToBranch(selectedClientId, state.currentBranchId);
+    }
     if (selectedType === 'subscription') {
       sellSubscription(selectedClientId, selectedItemId, discount, paymentMethod);
     } else {
@@ -83,21 +87,31 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
               />
             </div>
             <div className="space-y-1 max-h-64 overflow-y-auto">
-              {filteredClients.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => { setSelectedClientId(c.id); setStep('product'); }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm hover:bg-secondary transition-colors text-left ${selectedClientId === c.id ? 'bg-secondary' : ''}`}
-                >
-                  <div>
-                    <div className="font-medium">{getClientFullName(c)}</div>
-                    <div className="text-xs text-muted-foreground">{c.phone}</div>
-                  </div>
-                  {c.activeSubscriptionId && (
-                    <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">абонемент</span>
-                  )}
-                </button>
-              ))}
+              {filteredClients.map(c => {
+                const isOtherBranch = c.branchId !== state.currentBranchId;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => { setSelectedClientId(c.id); setStep('product'); }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm hover:bg-secondary transition-colors text-left ${selectedClientId === c.id ? 'bg-secondary' : ''}`}
+                  >
+                    <div>
+                      <div className="font-medium flex items-center gap-1.5">
+                        {getClientFullName(c)}
+                        {isOtherBranch && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            {state.branches.find(b => b.id === c.branchId)?.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{c.phone}</div>
+                    </div>
+                    {c.activeSubscriptionId && (
+                      <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">абонемент</span>
+                    )}
+                  </button>
+                );
+              })}
               {filteredClients.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">Клиент не найден</p>
               )}

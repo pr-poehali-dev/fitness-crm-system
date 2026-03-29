@@ -50,6 +50,19 @@ export interface SubscriptionPlan {
   allDirections: boolean;
   freezeDays: number;
   branchId: string;
+  // Срок автоактивации: кол-во дней с момента покупки, после которых абонемент активируется автоматически
+  // Если null — активируется при покупке сразу
+  autoActivateDays: number | null;
+}
+
+export interface SingleVisitPlan {
+  id: string;
+  name: string;
+  price: number;
+  trainingTypeIds: string[];
+  branchId: string;
+  // Срок автоактивации разового (дни с покупки до автоактивации), null — сразу
+  autoActivateDays: number | null;
 }
 
 export interface Subscription {
@@ -63,11 +76,16 @@ export interface Subscription {
   freezeDaysLeft: number;
   frozenFrom: string | null;
   frozenTo: string | null;
-  status: 'active' | 'frozen' | 'expired' | 'returned';
+  // pending — ожидает первой тренировки для активации; active — активен; frozen — заморожен; expired/returned
+  status: 'pending' | 'active' | 'frozen' | 'expired' | 'returned';
   price: number;
   discount: number;
   paymentMethod: 'cash' | 'card';
   branchId: string;
+  // дата реальной активации (когда сдвинулась точка отсчёта endDate)
+  activatedAt: string | null;
+  // дата, после которой автоактивируется если клиент не пришёл (null — уже активен)
+  autoActivateDate: string | null;
 }
 
 export interface Client {
@@ -129,13 +147,7 @@ export interface Sale {
   isRenewal: boolean;
 }
 
-export interface SingleVisitPlan {
-  id: string;
-  name: string;
-  price: number;
-  trainingTypeIds: string[];
-  branchId: string;
-}
+
 
 export interface Inquiry {
   id: string;
@@ -346,16 +358,16 @@ const defaultTrainingTypes: TrainingType[] = [
 ];
 
 const defaultPlans: SubscriptionPlan[] = [
-  { id: 'p1', name: 'Безлимит на месяц', price: 4500, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: [], allDirections: true, freezeDays: 7, branchId: 'b1' },
-  { id: 'p2', name: '8 занятий', price: 3200, durationDays: 45, sessionsLimit: 8, trainingTypeIds: ['tt1', 'tt2', 'tt4'], allDirections: false, freezeDays: 5, branchId: 'b1' },
-  { id: 'p3', name: '4 занятия', price: 1800, durationDays: 30, sessionsLimit: 4, trainingTypeIds: ['tt1', 'tt2'], allDirections: false, freezeDays: 3, branchId: 'b1' },
-  { id: 'p4', name: 'Безлимит Зумба', price: 3000, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: ['tt3'], allDirections: false, freezeDays: 5, branchId: 'b2' },
+  { id: 'p1', name: 'Безлимит на месяц', price: 4500, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: [], allDirections: true, freezeDays: 7, branchId: 'b1', autoActivateDays: null },
+  { id: 'p2', name: '8 занятий', price: 3200, durationDays: 45, sessionsLimit: 8, trainingTypeIds: ['tt1', 'tt2', 'tt4'], allDirections: false, freezeDays: 5, branchId: 'b1', autoActivateDays: null },
+  { id: 'p3', name: '4 занятия', price: 1800, durationDays: 30, sessionsLimit: 4, trainingTypeIds: ['tt1', 'tt2'], allDirections: false, freezeDays: 3, branchId: 'b1', autoActivateDays: null },
+  { id: 'p4', name: 'Безлимит Зумба', price: 3000, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: ['tt3'], allDirections: false, freezeDays: 5, branchId: 'b2', autoActivateDays: null },
 ];
 
 const defaultSingleVisitPlans: SingleVisitPlan[] = [
-  { id: 'sv1', name: 'Разовое посещение (Йога)', price: 700, trainingTypeIds: ['tt1'], branchId: 'b1' },
-  { id: 'sv2', name: 'Разовое посещение (Силовая)', price: 700, trainingTypeIds: ['tt2'], branchId: 'b1' },
-  { id: 'sv3', name: 'Разовое посещение (Зумба)', price: 600, trainingTypeIds: ['tt3'], branchId: 'b2' },
+  { id: 'sv1', name: 'Разовое посещение (Йога)', price: 700, trainingTypeIds: ['tt1'], branchId: 'b1', autoActivateDays: null },
+  { id: 'sv2', name: 'Разовое посещение (Силовая)', price: 700, trainingTypeIds: ['tt2'], branchId: 'b1', autoActivateDays: null },
+  { id: 'sv3', name: 'Разовое посещение (Зумба)', price: 600, trainingTypeIds: ['tt3'], branchId: 'b2', autoActivateDays: null },
 ];
 
 const today = new Date();
@@ -371,9 +383,9 @@ const defaultClients: Client[] = [
 ];
 
 const defaultSubscriptions: Subscription[] = [
-  { id: 's1', clientId: 'c1', planId: 'p1', planName: 'Безлимит на месяц', purchaseDate: fmt(addDays(today, -20)), endDate: fmt(addDays(today, 10)), sessionsLeft: 'unlimited', freezeDaysLeft: 7, frozenFrom: null, frozenTo: null, status: 'active', price: 4500, discount: 0, paymentMethod: 'card', branchId: 'b1' },
-  { id: 's2', clientId: 'c2', planId: 'p2', planName: '8 занятий', purchaseDate: fmt(addDays(today, -15)), endDate: fmt(addDays(today, 30)), sessionsLeft: 5, freezeDaysLeft: 5, frozenFrom: null, frozenTo: null, status: 'active', price: 3200, discount: 0, paymentMethod: 'cash', branchId: 'b1' },
-  { id: 's3', clientId: 'c5', planId: 'p1', planName: 'Безлимит на месяц', purchaseDate: fmt(addDays(today, -5)), endDate: fmt(addDays(today, 25)), sessionsLeft: 'unlimited', freezeDaysLeft: 7, frozenFrom: null, frozenTo: null, status: 'active', price: 4500, discount: 10, paymentMethod: 'card', branchId: 'b1' },
+  { id: 's1', clientId: 'c1', planId: 'p1', planName: 'Безлимит на месяц', purchaseDate: fmt(addDays(today, -20)), endDate: fmt(addDays(today, 10)), sessionsLeft: 'unlimited', freezeDaysLeft: 7, frozenFrom: null, frozenTo: null, status: 'active', price: 4500, discount: 0, paymentMethod: 'card', branchId: 'b1', activatedAt: fmt(addDays(today, -20)), autoActivateDate: null },
+  { id: 's2', clientId: 'c2', planId: 'p2', planName: '8 занятий', purchaseDate: fmt(addDays(today, -15)), endDate: fmt(addDays(today, 30)), sessionsLeft: 5, freezeDaysLeft: 5, frozenFrom: null, frozenTo: null, status: 'active', price: 3200, discount: 0, paymentMethod: 'cash', branchId: 'b1', activatedAt: fmt(addDays(today, -15)), autoActivateDate: null },
+  { id: 's3', clientId: 'c5', planId: 'p1', planName: 'Безлимит на месяц', purchaseDate: fmt(addDays(today, -5)), endDate: fmt(addDays(today, 25)), sessionsLeft: 'unlimited', freezeDaysLeft: 7, frozenFrom: null, frozenTo: null, status: 'active', price: 4500, discount: 10, paymentMethod: 'card', branchId: 'b1', activatedAt: fmt(addDays(today, -5)), autoActivateDate: null },
 ];
 
 const defaultSchedule: ScheduleEntry[] = [
@@ -497,7 +509,25 @@ const AUTH_KEY = 'fitcrm_auth_v1';
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...initialState, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Backward compat: добавляем новые поля если их нет
+      const subscriptions = (parsed.subscriptions || []).map((s: Subscription) => ({
+        activatedAt: s.activatedAt ?? s.purchaseDate,
+        autoActivateDate: s.autoActivateDate ?? null,
+        ...s,
+        status: (s.status === 'active' || s.status === 'frozen' || s.status === 'expired' || s.status === 'returned' || s.status === 'pending') ? s.status : 'active',
+      }));
+      const subscriptionPlans = (parsed.subscriptionPlans || []).map((p: SubscriptionPlan) => ({
+        autoActivateDays: p.autoActivateDays ?? null,
+        ...p,
+      }));
+      const singleVisitPlans = (parsed.singleVisitPlans || []).map((p: SingleVisitPlan) => ({
+        autoActivateDays: p.autoActivateDays ?? null,
+        ...p,
+      }));
+      return { ...initialState, ...parsed, subscriptions, subscriptionPlans, singleVisitPlans };
+    }
   } catch (e) { /* ignore */ }
   return initialState;
 }
@@ -553,16 +583,24 @@ export function useStore() {
     const isRenewal = hadSub && !isReturn;
     const isFirst = !hadSub;
     const finalPrice = Math.round(plan.price * (1 - discount / 100));
-    const endDate = fmt(addDays(new Date(), plan.durationDays));
     const subId = genId();
     const saleId = genId();
+    // Если задан autoActivateDays — абонемент pending, endDate будет пересчитан при активации
+    const hasPendingMode = plan.autoActivateDays != null;
+    const autoActivateDate = hasPendingMode ? fmt(addDays(new Date(), plan.autoActivateDays!)) : null;
+    const endDate = hasPendingMode
+      ? fmt(addDays(new Date(), plan.autoActivateDays! + plan.durationDays))
+      : fmt(addDays(new Date(), plan.durationDays));
     const newSub: Subscription = {
       id: subId, clientId, planId, planName: plan.name,
       purchaseDate: fmt(new Date()), endDate,
       sessionsLeft: plan.sessionsLimit,
       freezeDaysLeft: plan.freezeDays,
       frozenFrom: null, frozenTo: null,
-      status: 'active', price: plan.price, discount, paymentMethod, branchId: plan.branchId
+      status: hasPendingMode ? 'pending' : 'active',
+      price: plan.price, discount, paymentMethod, branchId: plan.branchId,
+      activatedAt: hasPendingMode ? null : fmt(new Date()),
+      autoActivateDate,
     };
     const newSale: Sale = {
       id: saleId, clientId, type: 'subscription', itemId: planId, itemName: plan.name,
@@ -646,9 +684,19 @@ export function useStore() {
       let newSubs = s.subscriptions;
       if (status === 'attended' && subscriptionId) {
         newSubs = s.subscriptions.map(sub => {
-          if (sub.id !== subscriptionId || sub.sessionsLeft === 'unlimited') return sub;
-          const left = (sub.sessionsLeft as number) - 1;
-          return { ...sub, sessionsLeft: left };
+          if (sub.id !== subscriptionId) return sub;
+          // Если абонемент pending — активируем его: пересчитываем endDate от сегодня
+          if (sub.status === 'pending') {
+            const plan = s.subscriptionPlans.find(p => p.id === sub.planId);
+            const durationDays = plan?.durationDays ?? 30;
+            const activatedAt = fmt(new Date());
+            const endDate = fmt(addDays(new Date(), durationDays));
+            const updatedSub = { ...sub, status: 'active' as const, activatedAt, endDate, autoActivateDate: null };
+            if (updatedSub.sessionsLeft === 'unlimited') return updatedSub;
+            return { ...updatedSub, sessionsLeft: (updatedSub.sessionsLeft as number) - 1 };
+          }
+          if (sub.sessionsLeft === 'unlimited') return sub;
+          return { ...sub, sessionsLeft: (sub.sessionsLeft as number) - 1 };
         });
       }
       return {
@@ -657,6 +705,26 @@ export function useStore() {
         subscriptions: newSubs
       };
     });
+  };
+
+  // Автоматически активировать pending абонементы у которых истёк срок ожидания
+  const autoActivatePendingSubscriptions = () => {
+    const todayStr = fmt(new Date());
+    update(s => ({
+      ...s,
+      subscriptions: s.subscriptions.map(sub => {
+        if (sub.status !== 'pending' || !sub.autoActivateDate) return sub;
+        if (sub.autoActivateDate <= todayStr) {
+          // Активируем: endDate = autoActivateDate + durationDays
+          const plan = s.subscriptionPlans.find(p => p.id === sub.planId);
+          const durationDays = plan?.durationDays ?? 30;
+          const activatedAt = sub.autoActivateDate;
+          const endDate = fmt(addDays(new Date(activatedAt), durationDays));
+          return { ...sub, status: 'active' as const, activatedAt, endDate, autoActivateDate: null };
+        }
+        return sub;
+      })
+    }));
   };
 
   const copyWeekSchedule = (fromDays: string[], toDays: string[]) => {
@@ -691,6 +759,18 @@ export function useStore() {
         visits: s.visits.map(v => v.id === visitId ? { ...v, status: 'enrolled', subscriptionId: null, isSingleVisit: false, price: 0 } : v),
         subscriptions: newSubs
       };
+    });
+  };
+
+  // Добавить клиента из другого филиала в текущий (копия с новым branchId)
+  const addClientToBranch = (clientId: string, targetBranchId: string) => {
+    update(s => {
+      const client = s.clients.find(c => c.id === clientId);
+      if (!client) return s;
+      const alreadyInBranch = s.clients.some(c => c.id === clientId && c.branchId === targetBranchId);
+      if (alreadyInBranch) return s;
+      const newClient: Client = { ...client, id: genId(), branchId: targetBranchId, fromBranchId: client.branchId, createdAt: fmt(new Date()), activeSubscriptionId: null };
+      return { ...s, clients: [...s.clients, newClient] };
     });
   };
 
@@ -874,10 +954,11 @@ export function useStore() {
 
   return {
     state,
-    addClient, updateClient,
+    addClient, updateClient, addClientToBranch,
     sellSubscription, sellSingleVisit,
     freezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,
+    autoActivatePendingSubscriptions,
     addBranch, updateBranch, removeBranch,
     addHall, updateHall, removeHall,
     addTrainer, updateTrainer, removeTrainer,
