@@ -1188,7 +1188,7 @@ export default function Settings({ store }: SettingsProps) {
       </Dialog>
 
       <Dialog open={showAddPlan} onOpenChange={setShowAddPlan}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingPlan ? 'Редактировать абонемент' : 'Новый абонемент'}</DialogTitle></DialogHeader>
 
           <div className="space-y-4">
@@ -1248,7 +1248,7 @@ export default function Settings({ store }: SettingsProps) {
       </Dialog>
 
       <Dialog open={showAddSingle} onOpenChange={setShowAddSingle}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingSingle ? 'Редактировать разовое' : 'Новое разовое посещение'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={singleForm.name} onChange={e => setSingleForm(f => ({ ...f, name: e.target.value }))} /></div>
