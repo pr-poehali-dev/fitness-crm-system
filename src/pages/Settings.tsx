@@ -545,7 +545,7 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                 {PLANNING_ROWS.map(row => {
                   const isManual = PLAN_MANUAL_KEYS.has(row.key);
                   return (
-                    <th key={row.key} className={`px-2 py-3 font-medium text-center whitespace-nowrap min-w-[110px] border-l ${isManual ? 'border-amber-200 bg-amber-50/60 text-amber-800' : 'border-border/40'}`}>
+                    <th key={row.key} className={`px-2 py-3 font-medium text-center w-[110px] min-w-[110px] max-w-[110px] border-l leading-tight ${isManual ? 'border-amber-200 bg-amber-50/60 text-amber-800' : 'border-border/40'}`}>
                       {isManual && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1 mb-0.5" />}
                       {row.label}
                     </th>
