@@ -92,7 +92,7 @@ const emptyForm = {
 };
 
 export default function Staff({ store }: StaffProps) {
-  const { state, addStaff, updateStaff, removeStaff, generateInviteToken } = store;
+  const { state, addStaff, updateStaff, removeStaff, generateInviteToken, regenerateAccessToken } = store;
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -105,6 +105,25 @@ export default function Staff({ store }: StaffProps) {
   const [inviteModalId, setInviteModalId] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [accessLinkCopied, setAccessLinkCopied] = useState(false);
+
+  const getAccessLink = () => {
+    const token = state.accessToken ?? regenerateAccessToken();
+    return `${window.location.origin}${window.location.pathname}?access=${token}`;
+  };
+
+  const handleCopyAccessLink = () => {
+    const link = getAccessLink();
+    navigator.clipboard.writeText(link).then(() => {
+      setAccessLinkCopied(true);
+      setTimeout(() => setAccessLinkCopied(false), 2000);
+    });
+  };
+
+  const handleRegenerateAccessToken = () => {
+    regenerateAccessToken();
+    setAccessLinkCopied(false);
+  };
 
   const openInviteModal = (m: StaffMember) => {
     const token = m.inviteToken ?? generateInviteToken(m.id);
@@ -126,6 +145,13 @@ export default function Staff({ store }: StaffProps) {
     const link = `${window.location.origin}${window.location.pathname}?invite=${token}`;
     setInviteLink(link);
     setLinkCopied(false);
+  };
+
+  const toggleStaffBranch = (staffId: string, branchId: string, current: string[]) => {
+    const next = current.includes(branchId)
+      ? current.filter(id => id !== branchId)
+      : [...current, branchId];
+    if (next.length > 0) updateStaff(staffId, { branchIds: next });
   };
 
   const openAdd = () => {
@@ -193,70 +219,121 @@ export default function Staff({ store }: StaffProps) {
 
   return (
     <div className="space-y-5 animate-fade-in">
+
+      {/* Общая ссылка для входа */}
+      <div className="bg-white border border-border rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
+            <Icon name="Link2" size={18} className="text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-0.5">Общая ссылка для сотрудников</div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Отправьте эту ссылку сотруднику. Он откроет её и войдёт по своему логину и паролю.
+            </p>
+            {state.accessToken ? (
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground font-mono truncate">
+                  {`${window.location.origin}${window.location.pathname}?access=${state.accessToken}`}
+                </div>
+                <button
+                  onClick={handleCopyAccessLink}
+                  className={`shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${accessLinkCopied ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-secondary border-border hover:bg-secondary/70'}`}
+                >
+                  <Icon name={accessLinkCopied ? 'Check' : 'Copy'} size={13} />
+                  {accessLinkCopied ? 'Скопировано' : 'Копировать'}
+                </button>
+                <button
+                  onClick={handleRegenerateAccessToken}
+                  title="Сгенерировать новую ссылку (старая перестанет работать)"
+                  className="shrink-0 p-2 rounded-lg border border-border bg-secondary hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-muted-foreground transition-colors"
+                >
+                  <Icon name="RefreshCw" size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { regenerateAccessToken(); }}
+                className="flex items-center gap-2 text-sm px-4 py-2 bg-foreground text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+              >
+                <Icon name="Plus" size={14} />
+                Создать ссылку
+              </button>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">
+              Кнопка <Icon name="RefreshCw" size={11} className="inline" /> сбросит ссылку — старая перестанет работать.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end">
         <Button onClick={openAdd} className="bg-foreground text-primary-foreground hover:opacity-90">
           <Icon name="UserPlus" size={14} className="mr-1.5" /> Добавить сотрудника
         </Button>
       </div>
 
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <table className="w-full data-table">
-          <thead>
-            <tr>
-              <th>Сотрудник</th>
-              <th>Роль</th>
-              <th>Телефон</th>
-              <th>Филиалы</th>
-              <th>Пароль</th>
-              <th>Права</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.staff.map(m => (
-              <tr key={m.id}>
-                <td>
-                  <div className="font-medium">{m.name}</div>
-                  <div className="text-xs text-muted-foreground">{m.email}</div>
-                </td>
-                <td>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${ROLE_COLORS[m.role]}`}>
-                    {ROLE_LABELS[m.role]}
-                  </span>
-                </td>
-                <td className="text-muted-foreground">{m.phone}</td>
-                <td className="text-muted-foreground text-sm">
-                  {m.branchIds.map(id => state.branches.find(b => b.id === id)?.name).filter(Boolean).join(', ')}
-                </td>
-                <td>
-                  <button onClick={() => openPasswordModal(m)} className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
-                    <Icon name="KeyRound" size={13} className="inline mr-1" />
-                    {m.password ? '●●●●' : 'Задать'}
+      {/* Карточки сотрудников */}
+      <div className="grid gap-3">
+        {state.staff.map(m => (
+          <div key={m.id} className="bg-white border border-border rounded-xl p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 bg-secondary rounded-full flex items-center justify-center shrink-0 text-sm font-semibold">
+                  {m.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium text-sm">{m.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{m.login || m.email || m.phone}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[m.role]}`}>
+                  {ROLE_LABELS[m.role]}
+                </span>
+              </div>
+            </div>
+
+            {/* Филиалы */}
+            <div className="mt-3">
+              <div className="text-xs text-muted-foreground mb-1.5">Доступные филиалы:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {state.branches.map(b => (
+                  <button
+                    key={b.id}
+                    onClick={() => toggleStaffBranch(m.id, b.id, m.branchIds)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      m.branchIds.includes(b.id)
+                        ? 'bg-foreground text-primary-foreground border-foreground'
+                        : 'border-border text-muted-foreground hover:border-foreground/40'
+                    }`}
+                  >
+                    {b.name}
                   </button>
-                </td>
-                <td>
-                  <button onClick={() => openPerms(m)} className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
-                    <Icon name="Shield" size={13} className="inline mr-1" />
-                    Настроить
-                  </button>
-                </td>
-                <td>
-                  <div className="flex gap-1 justify-end">
-                    <button onClick={() => openInviteModal(m)} title="Ссылка для входа" className="p-1.5 rounded-lg hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors">
-                      <Icon name="Link2" size={13} />
-                    </button>
-                    <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-                      <Icon name="Pencil" size={13} />
-                    </button>
-                    <button onClick={() => removeStaff(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors">
-                      <Icon name="Trash2" size={13} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                ))}
+              </div>
+            </div>
+
+            {/* Действия */}
+            <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-1.5">
+              <button onClick={() => openPasswordModal(m)} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
+                <Icon name="KeyRound" size={12} />
+                {m.password ? 'Пароль' : 'Задать пароль'}
+              </button>
+              <button onClick={() => openPerms(m)} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
+                <Icon name="Shield" size={12} />
+                Права
+              </button>
+              <button onClick={() => openEdit(m)} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
+                <Icon name="Pencil" size={12} />
+                Изменить
+              </button>
+              <button onClick={() => removeStaff(m.id)} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 border border-border transition-colors ml-auto">
+                <Icon name="Trash2" size={12} />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Add/edit staff modal */}

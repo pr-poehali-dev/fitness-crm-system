@@ -25,10 +25,11 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
+  // accessToken из URL — разрешает показать страницу входа сотрудникам
+  const [urlAccessToken] = useState(() => new URLSearchParams(window.location.search).get('access'));
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const savedId = loadAuth();
     if (!savedId) return false;
-    // Проверяем что сотрудник есть в store
     try {
       const raw = localStorage.getItem('fitcrm_state_v1');
       if (raw) {
@@ -37,13 +38,12 @@ export default function App() {
         return false;
       }
     } catch { /* ignore */ }
-    // Если нет state в localStorage — дефолтные сотрудники
     const defaultIds = ['st1', 'st2', 'st3'];
     return defaultIds.includes(savedId);
   });
 
   useEffect(() => {
-    // Обработка инвайт-ссылки: ?invite=TOKEN
+    // Обработка индивидуальной инвайт-ссылки: ?invite=TOKEN (старый механизм)
     const params = new URLSearchParams(window.location.search);
     const inviteToken = params.get('invite');
     if (inviteToken) {
@@ -52,7 +52,6 @@ export default function App() {
         store.setCurrentStaff(member.id);
         saveAuth(member.id);
         setIsAuthenticated(true);
-        // Убираем токен из URL без перезагрузки
         window.history.replaceState({}, '', window.location.pathname);
         return;
       }
@@ -67,7 +66,6 @@ export default function App() {
     }
   }, [store.state.staff.length]);
 
-  // Автоматически активировать pending абонементы при загрузке
   useEffect(() => {
     store.autoActivatePendingSubscriptions();
   }, []);
@@ -76,6 +74,8 @@ export default function App() {
     store.setCurrentStaff(staffId);
     saveAuth(staffId);
     setIsAuthenticated(true);
+    // Убираем токен из URL после успешного входа
+    if (urlAccessToken) window.history.replaceState({}, '', window.location.pathname);
   };
 
   const handleLogout = () => {
@@ -89,7 +89,28 @@ export default function App() {
   };
 
   if (!isAuthenticated) {
-    return <Login store={store} onLogin={handleLogin} />;
+    // Показываем страницу входа только если:
+    // 1. Открыта общая ссылка с правильным токеном (?access=TOKEN)
+    // 2. Уже есть сохранённая сессия (возврат после выхода)
+    // 3. Токен совпадает с сохранённым в store
+    const savedStaffId = loadAuth();
+    const hasSession = !!savedStaffId;
+    const validAccessToken = urlAccessToken && store.state.accessToken && urlAccessToken === store.state.accessToken;
+    if (hasSession || validAccessToken) {
+      return <Login store={store} onLogin={handleLogin} />;
+    }
+    // Без ссылки — заглушка
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="text-center max-w-sm">
+          <div className="w-12 h-12 bg-foreground rounded-xl flex items-center justify-center mx-auto mb-4">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 text-white fill-none stroke-white stroke-2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <h1 className="text-xl font-semibold mb-2">Рельеф-СРМ</h1>
+          <p className="text-sm text-muted-foreground">Для входа используйте ссылку, которую выдал руководитель.</p>
+        </div>
+      </div>
+    );
   }
 
   const renderPage = () => {
