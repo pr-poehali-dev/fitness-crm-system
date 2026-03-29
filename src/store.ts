@@ -1504,6 +1504,30 @@ function saveState(s: AppState) {
   saveStateToDb(s);
 }
 
+// Генерирует ссылку со списком сотрудников (логин+пароль) в base64
+export function generateStaffLink(staff: StaffMember[]): string {
+  const data = staff.map(m => ({
+    id: m.id, name: m.name, role: m.role,
+    login: m.login || '', email: m.email,
+    password: m.password || '',
+    branchIds: m.branchIds,
+    permissions: m.permissions,
+    createdAt: m.createdAt,
+  }));
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  return `${window.location.origin}${window.location.pathname}?sl=${encoded}`;
+}
+
+// Парсит ?sl=... и возвращает список сотрудников
+export function parseStaffLink(param: string): StaffMember[] | null {
+  try {
+    const decoded = decodeURIComponent(escape(atob(param)));
+    const data = JSON.parse(decoded);
+    if (!Array.isArray(data)) return null;
+    return data as StaffMember[];
+  } catch { return null; }
+}
+
 export function loadAuth(): string | null {
   try { return localStorage.getItem(AUTH_KEY); } catch (e) { return null; }
 }

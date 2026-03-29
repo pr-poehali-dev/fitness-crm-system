@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StoreType, StaffMember, StaffRole, Permission, ROLE_LABELS, DEFAULT_PERMISSIONS, getAccessToken, regenerateAccessToken } from '@/store';
+import { useState } from 'react';
+import { StoreType, StaffMember, StaffRole, Permission, ROLE_LABELS, DEFAULT_PERMISSIONS, generateStaffLink } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -102,30 +102,21 @@ export default function Staff({ store }: StaffProps) {
   const [passwordModalId, setPasswordModalId] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
   const [showPwd, setShowPwd] = useState(false);
-  const [accessLink, setAccessLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
-  const [linkLoading, setLinkLoading] = useState(false);
-
-  // Загружаем общий токен при открытии раздела
-  useEffect(() => {
-    getAccessToken().then(token => {
-      if (token) setAccessLink(`${window.location.origin}${window.location.pathname}?access=${token}`);
-    });
-  }, []);
 
   const handleCopyLink = () => {
-    if (!accessLink) return;
-    navigator.clipboard.writeText(accessLink).catch(() => {});
+    const link = generateStaffLink(state.staff);
+    navigator.clipboard.writeText(link).catch(() => {
+      // fallback для браузеров без clipboard API
+      const el = document.createElement('textarea');
+      el.value = link;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    });
     setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
-  const handleRegenerateLink = async () => {
-    setLinkLoading(true);
-    const token = await regenerateAccessToken();
-    if (token) setAccessLink(`${window.location.origin}${window.location.pathname}?access=${token}`);
-    setLinkLoading(false);
-    setLinkCopied(false);
+    setTimeout(() => setLinkCopied(false), 3000);
   };
 
   const openAdd = () => {
@@ -194,7 +185,7 @@ export default function Staff({ store }: StaffProps) {
   return (
     <div className="space-y-5 animate-fade-in">
 
-      {/* Общая ссылка для входа сотрудников */}
+      {/* Ссылка для входа сотрудников */}
       <div className="bg-white border border-border rounded-xl p-4">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
@@ -203,42 +194,17 @@ export default function Staff({ store }: StaffProps) {
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm mb-0.5">Ссылка для входа сотрудников</div>
             <p className="text-xs text-muted-foreground mb-3">
-              Отправьте эту ссылку сотруднику. Он откроет её и войдёт по своему логину и паролю.
+              Нажмите «Скопировать» и отправьте ссылку сотруднику. Он откроет её и войдёт по своему логину и паролю.
+              <br />
+              <span className="text-amber-600 font-medium">После добавления или изменения сотрудников — скопируйте ссылку заново.</span>
             </p>
-            {accessLink ? (
-              <div className="flex gap-2 items-center flex-wrap">
-                <div className="flex-1 min-w-0 bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground font-mono truncate">
-                  {accessLink}
-                </div>
-                <button
-                  onClick={handleCopyLink}
-                  className={`shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${linkCopied ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-secondary border-border hover:bg-secondary/70'}`}
-                >
-                  <Icon name={linkCopied ? 'Check' : 'Copy'} size={13} />
-                  {linkCopied ? 'Скопировано' : 'Копировать'}
-                </button>
-                <button
-                  onClick={handleRegenerateLink}
-                  disabled={linkLoading}
-                  title="Сгенерировать новую ссылку — старая перестанет работать"
-                  className="shrink-0 p-2 rounded-lg border border-border bg-secondary hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-muted-foreground transition-colors"
-                >
-                  <Icon name={linkLoading ? 'Loader' : 'RefreshCw'} size={13} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleRegenerateLink}
-                disabled={linkLoading}
-                className="flex items-center gap-2 text-sm px-4 py-2 bg-foreground text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
-              >
-                <Icon name="Plus" size={14} />
-                {linkLoading ? 'Создаём...' : 'Создать ссылку'}
-              </button>
-            )}
-            <p className="text-xs text-muted-foreground mt-2">
-              Кнопка обновления сбросит старую ссылку — она сразу перестанет работать.
-            </p>
+            <button
+              onClick={handleCopyLink}
+              className={`flex items-center gap-2 text-sm px-4 py-2 rounded-lg border transition-colors ${linkCopied ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-foreground text-primary-foreground hover:opacity-90'}`}
+            >
+              <Icon name={linkCopied ? 'Check' : 'Copy'} size={14} />
+              {linkCopied ? 'Ссылка скопирована!' : 'Скопировать ссылку'}
+            </button>
           </div>
         </div>
       </div>

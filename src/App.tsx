@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useStore, loadAuth, saveAuth, clearAuth } from '@/store';
+import { useStore, loadAuth, saveAuth, clearAuth, parseStaffLink } from '@/store';
 import Layout from '@/components/Layout';
 import SellModal from '@/components/SellModal';
 import InquiryModal from '@/components/InquiryModal';
@@ -25,9 +25,24 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
-  // ?access=TOKEN — общая ссылка для сотрудников (токен проверяется на бэкенде при входе)
-  const _urlAccessToken = new URLSearchParams(window.location.search).get('access');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // При открытии ссылки ?sl=... — сразу встраиваем сотрудников в state
+    const params = new URLSearchParams(window.location.search);
+    const sl = params.get('sl');
+    if (sl) {
+      const staffFromLink = parseStaffLink(sl);
+      if (staffFromLink && staffFromLink.length > 0) {
+        try {
+          const raw = localStorage.getItem('fitcrm_state_v1');
+          const base = raw ? JSON.parse(raw) : {};
+          // Мёржим сотрудников из ссылки в сохранённый state
+          base.staff = staffFromLink;
+          localStorage.setItem('fitcrm_state_v1', JSON.stringify(base));
+        } catch { /* ignore */ }
+        // Убираем параметр из URL
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
     const savedId = loadAuth();
     if (!savedId) return false;
     try {
