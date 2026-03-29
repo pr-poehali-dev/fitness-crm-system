@@ -490,6 +490,7 @@ export interface AppState {
   adSources: string[];
   currentBranchId: string;
   dismissedNotifications: string[]; // ключи вида `${categoryKey}:${clientId}:${date}`
+  failedNotifications: Record<string, string>; // key -> причина
   notificationCategories: NotificationCategory[];
   importedCvetnoiV1?: boolean;
   importedCvetnoiV2?: boolean;
@@ -542,6 +543,7 @@ const initialState: AppState = {
   adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
   dismissedNotifications: [],
+  failedNotifications: {},
   notificationCategories: DEFAULT_NOTIFICATION_CATEGORIES,
 };
 
@@ -1423,6 +1425,7 @@ function loadState(): AppState {
         trainers,
         trainingTypes,
         dismissedNotifications: parsed.dismissedNotifications ?? [],
+        failedNotifications: parsed.failedNotifications ?? {},
         notificationCategories: parsed.notificationCategories ?? DEFAULT_NOTIFICATION_CATEGORIES,
       };
       // Миграция: импорт базы клиентов Цветной (v2 — полная база)
@@ -1832,7 +1835,17 @@ export function useStore() {
     update(s => ({ ...s, dismissedNotifications: [...s.dismissedNotifications.filter(k => k !== key), key] }));
   };
   const restoreNotification = (key: string) => {
-    update(s => ({ ...s, dismissedNotifications: s.dismissedNotifications.filter(k => k !== key) }));
+    update(s => {
+      const { [key]: _, ...rest } = s.failedNotifications;
+      return { ...s, dismissedNotifications: s.dismissedNotifications.filter(k => k !== key), failedNotifications: rest };
+    });
+  };
+  const failNotification = (key: string, reason: string) => {
+    update(s => ({
+      ...s,
+      dismissedNotifications: [...s.dismissedNotifications.filter(k => k !== key), key],
+      failedNotifications: { ...s.failedNotifications, [key]: reason },
+    }));
   };
   const addNotificationCategory = (cat: Omit<NotificationCategory, 'id'>) => {
     update(s => ({ ...s, notificationCategories: [...s.notificationCategories, { ...cat, id: genId() }] }));
