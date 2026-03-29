@@ -25,10 +25,11 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
+  // ?access=TOKEN — общая ссылка для сотрудников (токен проверяется на бэкенде при входе)
+  const _urlAccessToken = new URLSearchParams(window.location.search).get('access');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const savedId = loadAuth();
     if (!savedId) return false;
-    // Проверяем что сотрудник есть в store
     try {
       const raw = localStorage.getItem('fitcrm_state_v1');
       if (raw) {
@@ -37,26 +38,11 @@ export default function App() {
         return false;
       }
     } catch { /* ignore */ }
-    // Если нет state в localStorage — дефолтные сотрудники
     const defaultIds = ['st1', 'st2', 'st3'];
     return defaultIds.includes(savedId);
   });
 
   useEffect(() => {
-    // Обработка инвайт-ссылки: ?invite=TOKEN
-    const params = new URLSearchParams(window.location.search);
-    const inviteToken = params.get('invite');
-    if (inviteToken) {
-      const member = store.state.staff.find(m => m.inviteToken === inviteToken);
-      if (member) {
-        store.setCurrentStaff(member.id);
-        saveAuth(member.id);
-        setIsAuthenticated(true);
-        // Убираем токен из URL без перезагрузки
-        window.history.replaceState({}, '', window.location.pathname);
-        return;
-      }
-    }
     const savedStaffId = loadAuth();
     if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
       store.setCurrentStaff(savedStaffId);

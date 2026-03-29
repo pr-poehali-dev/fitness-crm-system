@@ -1458,8 +1458,50 @@ function loadState(): AppState {
   return fresh;
 }
 
+// URL бэкенда — заполняется после деплоя
+const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE_URL__'] || '';
+
+async function saveStateToDb(s: AppState) {
+  if (!CRM_STATE_URL) return;
+  try {
+    await fetch(`${CRM_STATE_URL}?action=state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: s }),
+    });
+  } catch { /* ignore */ }
+}
+
+export async function loadStateFromDb(): Promise<AppState | null> {
+  if (!CRM_STATE_URL) return null;
+  try {
+    const res = await fetch(`${CRM_STATE_URL}?action=state`);
+    const json = await res.json();
+    return json.data || null;
+  } catch { return null; }
+}
+
+export async function getAccessToken(): Promise<string> {
+  if (!CRM_STATE_URL) return '';
+  try {
+    const res = await fetch(`${CRM_STATE_URL}?action=token`);
+    const json = await res.json();
+    return json.token || '';
+  } catch { return ''; }
+}
+
+export async function regenerateAccessToken(): Promise<string> {
+  if (!CRM_STATE_URL) return '';
+  try {
+    const res = await fetch(`${CRM_STATE_URL}?action=token`, { method: 'POST' });
+    const json = await res.json();
+    return json.token || '';
+  } catch { return ''; }
+}
+
 function saveState(s: AppState) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+  saveStateToDb(s);
 }
 
 export function loadAuth(): string | null {
@@ -1476,6 +1518,19 @@ export function clearAuth() {
 
 export function useStore() {
   const [state, setState] = useState<AppState>(() => loadState());
+  const [dbLoaded, setDbLoaded] = useState(false);
+
+  // При первом запуске — пробуем загрузить из БД (приоритет над localStorage)
+  useEffect(() => {
+    if (dbLoaded) return;
+    loadStateFromDb().then(dbState => {
+      if (dbState) {
+        setState(dbState);
+        saveState(dbState); // синхронизируем localStorage
+      }
+      setDbLoaded(true);
+    });
+  }, []);
 
   const update = useCallback((updater: (s: AppState) => AppState) => {
     setState(prev => {

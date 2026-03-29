@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StoreType, StaffMember, StaffRole, Permission, ROLE_LABELS, DEFAULT_PERMISSIONS } from '@/store';
+import { useState, useEffect } from 'react';
+import { StoreType, StaffMember, StaffRole, Permission, ROLE_LABELS, DEFAULT_PERMISSIONS, getAccessToken, regenerateAccessToken } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -92,7 +92,7 @@ const emptyForm = {
 };
 
 export default function Staff({ store }: StaffProps) {
-  const { state, addStaff, updateStaff, removeStaff, generateInviteToken } = store;
+  const { state, addStaff, updateStaff, removeStaff } = store;
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -102,29 +102,29 @@ export default function Staff({ store }: StaffProps) {
   const [passwordModalId, setPasswordModalId] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
   const [showPwd, setShowPwd] = useState(false);
-  const [inviteModalId, setInviteModalId] = useState<string | null>(null);
-  const [inviteLink, setInviteLink] = useState('');
+  const [accessLink, setAccessLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [linkLoading, setLinkLoading] = useState(false);
 
-  const openInviteModal = (m: StaffMember) => {
-    const token = m.inviteToken ?? generateInviteToken(m.id);
-    const link = `${window.location.origin}${window.location.pathname}?invite=${token}`;
-    setInviteLink(link);
-    setInviteModalId(m.id);
-    setLinkCopied(false);
-  };
-
-  const copyInviteLink = () => {
-    navigator.clipboard.writeText(inviteLink).then(() => {
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+  // Загружаем общий токен при открытии раздела
+  useEffect(() => {
+    getAccessToken().then(token => {
+      if (token) setAccessLink(`${window.location.origin}${window.location.pathname}?access=${token}`);
     });
+  }, []);
+
+  const handleCopyLink = () => {
+    if (!accessLink) return;
+    navigator.clipboard.writeText(accessLink).catch(() => {});
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const regenerateLink = (staffId: string) => {
-    const token = generateInviteToken(staffId);
-    const link = `${window.location.origin}${window.location.pathname}?invite=${token}`;
-    setInviteLink(link);
+  const handleRegenerateLink = async () => {
+    setLinkLoading(true);
+    const token = await regenerateAccessToken();
+    if (token) setAccessLink(`${window.location.origin}${window.location.pathname}?access=${token}`);
+    setLinkLoading(false);
     setLinkCopied(false);
   };
 
@@ -193,6 +193,56 @@ export default function Staff({ store }: StaffProps) {
 
   return (
     <div className="space-y-5 animate-fade-in">
+
+      {/* Общая ссылка для входа сотрудников */}
+      <div className="bg-white border border-border rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
+            <Icon name="Link2" size={18} className="text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-0.5">Ссылка для входа сотрудников</div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Отправьте эту ссылку сотруднику. Он откроет её и войдёт по своему логину и паролю.
+            </p>
+            {accessLink ? (
+              <div className="flex gap-2 items-center flex-wrap">
+                <div className="flex-1 min-w-0 bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground font-mono truncate">
+                  {accessLink}
+                </div>
+                <button
+                  onClick={handleCopyLink}
+                  className={`shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${linkCopied ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-secondary border-border hover:bg-secondary/70'}`}
+                >
+                  <Icon name={linkCopied ? 'Check' : 'Copy'} size={13} />
+                  {linkCopied ? 'Скопировано' : 'Копировать'}
+                </button>
+                <button
+                  onClick={handleRegenerateLink}
+                  disabled={linkLoading}
+                  title="Сгенерировать новую ссылку — старая перестанет работать"
+                  className="shrink-0 p-2 rounded-lg border border-border bg-secondary hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-muted-foreground transition-colors"
+                >
+                  <Icon name={linkLoading ? 'Loader' : 'RefreshCw'} size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleRegenerateLink}
+                disabled={linkLoading}
+                className="flex items-center gap-2 text-sm px-4 py-2 bg-foreground text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+              >
+                <Icon name="Plus" size={14} />
+                {linkLoading ? 'Создаём...' : 'Создать ссылку'}
+              </button>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">
+              Кнопка обновления сбросит старую ссылку — она сразу перестанет работать.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end">
         <Button onClick={openAdd} className="bg-foreground text-primary-foreground hover:opacity-90">
           <Icon name="UserPlus" size={14} className="mr-1.5" /> Добавить сотрудника
@@ -242,9 +292,6 @@ export default function Staff({ store }: StaffProps) {
                 </td>
                 <td>
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => openInviteModal(m)} title="Ссылка для входа" className="p-1.5 rounded-lg hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors">
-                      <Icon name="Link2" size={13} />
-                    </button>
                     <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
                       <Icon name="Pencil" size={13} />
                     </button>

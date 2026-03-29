@@ -1,0 +1,37 @@
+{
+  "tests": [
+    {
+      "name": "Load state",
+      "method": "GET",
+      "path": "/?action=state",
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Save state",
+      "method": "POST",
+      "path": "/?action=state",
+      "body": {"data": {"test": true}},
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get access token",
+      "method": "GET",
+      "path": "/?action=token",
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Regenerate access token",
+      "method": "POST",
+      "path": "/?action=token",
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
