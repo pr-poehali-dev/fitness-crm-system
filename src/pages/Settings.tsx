@@ -84,7 +84,13 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
 
   const subPlans = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
   const addPlans = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
-  const allItems = [...subPlans.map(p => ({ ...p, kind: 'sub' as const })), ...addPlans.map(p => ({ ...p, kind: 'add' as const }))];
+  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) для данного филиала
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(selectedBranchId));
+  const allItems = [
+    ...subPlans.map(p => ({ ...p, kind: 'sub' as const })),
+    ...addPlans.map(p => ({ ...p, kind: 'add' as const })),
+    ...extraItems.map(tt => ({ ...tt, kind: 'extra' as const })),
+  ];
 
   type ValMap = Record<string, Record<string, string>>;
   const [values, setValues] = useState<ValMap>({});
@@ -100,7 +106,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
       });
     });
     setValues(initial);
-  }, [selectedYear, selectedBranchId, state.salesPlans, state.subscriptionPlans, state.singleVisitPlans]);
+  }, [selectedYear, selectedBranchId, state.salesPlans, state.subscriptionPlans, state.singleVisitPlans, state.trainingTypes]);
 
   const handleChange = (month: string, itemId: string, val: string) => {
     setValues(prev => ({ ...prev, [month]: { ...(prev[month] || {}), [itemId]: val } }));
@@ -121,12 +127,14 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
-  // Для получения цены абонемента по id
+  // Для получения цены позиции по id
   const getPlanPrice = (itemId: string) => {
     const sp = state.subscriptionPlans.find(p => p.id === itemId);
     if (sp) return sp.price;
     const svp = state.singleVisitPlans.find(p => p.id === itemId);
-    return svp?.price ?? 0;
+    if (svp) return svp.price;
+    const tt = state.trainingTypes.find(t => t.id === itemId);
+    return tt?.extraPrice ?? 0;
   };
 
   const renderSection = (title: string, items: typeof allItems) => (
@@ -140,7 +148,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[160px] z-10">Абонемент</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[160px] z-10">Позиция</th>
                   {months.map((_, i) => (
                     <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[70px]">{MONTH_NAMES_SHORT[i]}</th>
                   ))}
@@ -222,6 +230,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
       <p className="text-xs text-muted-foreground">Вводите плановое количество продаж по каждой позиции на каждый месяц.</p>
       {renderSection('Абонементы', subPlans.map(p => ({ ...p, kind: 'sub' as const })))}
       {renderSection('Доп. продажи', addPlans.map(p => ({ ...p, kind: 'add' as const })))}
+      {renderSection('Доплаты (мини-группы, фан-группы)', extraItems.map(tt => ({ ...tt, kind: 'extra' as const })))}
     </div>
   );
 }

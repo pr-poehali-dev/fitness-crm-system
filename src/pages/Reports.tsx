@@ -974,6 +974,10 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
 
   const subItems = useMemo(() => state.subscriptionPlans.filter(p => bf(p.branchId)), [state.subscriptionPlans, filterBranchIds]);
   const addItems = useMemo(() => state.singleVisitPlans.filter(p => bf(p.branchId)), [state.singleVisitPlans, filterBranchIds]);
+  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.)
+  const extraItems = useMemo(() => state.trainingTypes.filter(tt =>
+    tt.extraPrice && tt.extraPrice > 0 && (filterBranchIds.length === 0 || tt.branchIds.some(b => filterBranchIds.includes(b)))
+  ), [state.trainingTypes, filterBranchIds]);
 
   const factData = useMemo(() => {
     const map: Record<string, Record<string, { count: number; sum: number }>> = {};
@@ -985,20 +989,32 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
         map[item.id][month] = { count: sales.length, sum: sales.reduce((a, s) => a + s.finalPrice, 0) };
       });
     });
+    // Факт по доплатам: sales.type === 'extra', матчим по extraPriceName
+    extraItems.forEach(tt => {
+      map[tt.id] = {};
+      months.forEach(month => {
+        const sales = state.sales.filter(s =>
+          s.type === 'extra' &&
+          s.itemName === (tt.extraPriceName || tt.name) &&
+          inM(s.date, month) && bf(s.branchId)
+        );
+        map[tt.id][month] = { count: sales.length, sum: sales.reduce((a, s) => a + s.finalPrice, 0) };
+      });
+    });
     return map;
-  }, [subItems, addItems, months, state.sales, filterBranchIds]);
+  }, [subItems, addItems, extraItems, months, state.sales, filterBranchIds]);
 
   const planData = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
-    [...subItems, ...addItems].forEach(item => { map[item.id] = {}; });
+    [...subItems, ...addItems, ...extraItems].forEach(item => { map[item.id] = {}; });
     months.forEach(month => {
-      const plan = state.salesPlans.find(p => p.month === month && (filterBranchIds.length === 0 || filterBranchIds.includes(p.branchId)));
-      if (plan) {
-        plan.items.forEach(pi => { if (map[pi.planId]) map[pi.planId][month] = pi.target; });
-      }
+      const plansForMonth = state.salesPlans.filter(p => p.month === month && (filterBranchIds.length === 0 || filterBranchIds.includes(p.branchId)));
+      plansForMonth.forEach(plan => {
+        plan.items.forEach(pi => { if (map[pi.planId] !== undefined) map[pi.planId][month] = (map[pi.planId][month] ?? 0) + pi.target; });
+      });
     });
     return map;
-  }, [subItems, addItems, months, state.salesPlans, filterBranchIds]);
+  }, [subItems, addItems, extraItems, months, state.salesPlans, filterBranchIds]);
 
   const renderPlanTable = (title: string, items: { id: string; name: string }[]) => {
     if (items.length === 0) return <p className="text-sm text-muted-foreground">Нет позиций для выбранных филиалов.</p>;
@@ -1146,6 +1162,8 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
       {renderFactTable('Абонементы — факт', subItems)}
       {renderPlanTable('Доп. продажи — план', addItems)}
       {renderFactTable('Доп. продажи — факт', addItems)}
+      {extraItems.length > 0 && renderPlanTable('Доплаты (мини/фан-группы) — план', extraItems)}
+      {extraItems.length > 0 && renderFactTable('Доплаты (мини/фан-группы) — факт', extraItems)}
     </div>
   );
 }
