@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import ClientCard from '@/components/ClientCard';
 
 interface NotificationsProps {
   store: StoreType;
@@ -28,9 +30,10 @@ function useNow() {
   return now;
 }
 
-export default function Notifications({ store }: NotificationsProps) {
+export default function Notifications({ store, onSell }: NotificationsProps & { onSell?: (clientId: string) => void }) {
   const { state, getClientCategory: _gc, getClientFullName, dismissNotification, restoreNotification } = store;
   const now = useNow();
+  const [openClientId, setOpenClientId] = useState<string | null>(null);
 
   const fmt = (d: Date) => d.toISOString().split('T')[0];
   const todayStr = fmt(now);
@@ -53,9 +56,10 @@ export default function Notifications({ store }: NotificationsProps) {
   const branchSchedule = state.schedule.filter(e => e.branchId === state.currentBranchId);
   const branchScheduleIds = new Set(branchSchedule.map(e => e.id));
 
+  // Первая тренировка = первая запись/посещение (не отменённая)
   const clientFirstVisitDate: Record<string, string> = {};
   state.visits
-    .filter(v => branchScheduleIds.has(v.scheduleEntryId))
+    .filter(v => branchScheduleIds.has(v.scheduleEntryId) && v.status !== 'cancelled')
     .sort((a, b) => a.date.localeCompare(b.date))
     .forEach(v => {
       if (!clientFirstVisitDate[v.clientId]) clientFirstVisitDate[v.clientId] = v.date;
@@ -199,6 +203,38 @@ export default function Notifications({ store }: NotificationsProps) {
         }
       }
 
+      // 9. Новичок отменил первую и перезаписался на другую
+      if (catMap['newcomer_rescheduled']?.enabled) {
+        const allSubs = state.sales.filter(s => s.clientId === client.id && s.type === 'subscription');
+        if (allSubs.length === 0) {
+          // Есть отменённая запись на первую тренировку
+          const cancelledVisit = state.visits.find(v =>
+            v.clientId === client.id && v.status === 'cancelled' && branchScheduleIds.has(v.scheduleEntryId)
+          );
+          if (cancelledVisit) {
+            // Есть новая активная запись после отмены
+            const newVisit = state.visits.find(v =>
+              v.clientId === client.id && v.status === 'enrolled' &&
+              branchScheduleIds.has(v.scheduleEntryId) && v.date >= todayStr
+            );
+            if (newVisit) {
+              const cancelInfo = getTrainingInfo(cancelledVisit.scheduleEntryId);
+              const newInfo = getTrainingInfo(newVisit.scheduleEntryId);
+              result.push({
+                key: `newcomer_rescheduled:${client.id}:${newVisit.scheduleEntryId}`,
+                clientId: client.id, name: fullName, phone,
+                reason: 'Новичок отменил и перезаписался',
+                detail: newInfo
+                  ? `Новая запись: ${newInfo.time} — ${newInfo.name} (${newVisit.date})${cancelInfo ? ` · Отменил: ${cancelInfo.name}` : ''}`
+                  : 'Перезаписался на новую тренировку',
+                icon: 'RefreshCw', color: 'text-teal-500', badge: 'bg-teal-100 text-teal-700',
+                categoryKey: 'newcomer_rescheduled',
+              });
+            }
+          }
+        }
+      }
+
       // 8. Пришёл вчера первый раз, нет абонемента
       if (catMap['no_sub_after_first']?.enabled && firstDate === yesterdayStr) {
         const yesterdayVisit = state.visits.find(v =>
@@ -271,7 +307,12 @@ export default function Notifications({ store }: NotificationsProps) {
             {items.map(item => (
               <div key={item.key} className="flex items-start gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{item.name}</div>
+                  <button
+                    onClick={() => setOpenClientId(item.clientId)}
+                    className="text-sm font-medium hover:underline hover:text-foreground text-left"
+                  >
+                    {item.name}
+                  </button>
                   <div className="text-xs text-muted-foreground mt-0.5">{item.phone}</div>
                   {item.detail && (
                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -292,6 +333,24 @@ export default function Notifications({ store }: NotificationsProps) {
           </div>
         </div>
       ))}
+
+      {/* Карточка клиента */}
+      {openClientId && (() => {
+        const client = state.clients.find(c => c.id === openClientId);
+        if (!client) return null;
+        return (
+          <Dialog open onOpenChange={v => { if (!v) setOpenClientId(null); }}>
+            <DialogContent className="max-w-md p-0 overflow-hidden">
+              <ClientCard
+                client={client}
+                store={store}
+                onClose={() => setOpenClientId(null)}
+                onSell={() => { setOpenClientId(null); onSell?.(client.id); }}
+              />
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {doneNotifications.length > 0 && (
         <div>

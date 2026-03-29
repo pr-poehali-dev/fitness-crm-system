@@ -458,6 +458,7 @@ export const DEFAULT_NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   { id: 'nc6', key: 'first_tomorrow', label: 'Первая тренировка завтра', icon: 'Bell', color: 'text-indigo-500', enabled: true },
   { id: 'nc7', key: 'missed_first', label: 'Не пришёл на первую', icon: 'UserX', color: 'text-red-500', enabled: true },
   { id: 'nc8', key: 'no_sub_after_first', label: 'После первой — нет абонемента', icon: 'CreditCard', color: 'text-emerald-600', enabled: true },
+  { id: 'nc9', key: 'newcomer_rescheduled', label: 'Новичок перезаписался', icon: 'RefreshCw', color: 'text-teal-500', enabled: true },
 ];
 
 export interface AppState {

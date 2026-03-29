@@ -400,7 +400,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
           const tr = state.trainers.find(t => t.id === entry.trainerId);
           const name = entry.isPersonal ? 'Персональная' : (tt?.name || '');
           const trainerName = tr?.name || '';
-          const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
+          const color = entry.isPersonal ? '#ef4444' : getEntryColor(entry.trainingTypeId);
           // colored dot
           ctx.fillStyle = color;
           ctx.beginPath();
@@ -571,7 +571,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                             <div className="space-y-1">
                               {cellEntries.map(entry => {
                                 const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
-                                const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
+                                const color = entry.isPersonal ? '#ef4444' : getEntryColor(entry.trainingTypeId);
                                 const isSelected = selectedEntryId === entry.id;
                                 const totalEnrolled = entry.enrolledClientIds.length + (entry.guestCount || 0);
                                 const fillPct = entry.maxCapacity > 0 ? (totalEnrolled / entry.maxCapacity) * 100 : 0;
@@ -863,11 +863,23 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
               </button>
               <button
                 onClick={() => setAddMode('personal')}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${addMode === 'personal' ? 'bg-violet-600 text-white border-violet-600' : 'bg-white border-border hover:bg-secondary'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${addMode === 'personal' ? 'bg-red-500 text-white border-red-500' : 'bg-white border-border hover:bg-secondary'}`}
               >
                 Персональная
               </button>
             </div>
+            {addMode === 'personal' && (
+              <div>
+                <Label className="text-xs">Клиент</Label>
+                <select value={form.personalClientId} onChange={e => setForm(f => ({ ...f, personalClientId: e.target.value }))}
+                  className="w-full h-8 text-sm border border-input rounded-md px-2 bg-white">
+                  <option value="">Выберите клиента...</option>
+                  {state.clients.filter(c => c.branchId === state.currentBranchId).map(c => (
+                    <option key={c.id} value={c.id}>{c.lastName} {c.firstName}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Время</Label>
@@ -890,18 +902,6 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                   <option value="">Выберите...</option>
                   {state.trainingTypes.map(tt => (
                     <option key={tt.id} value={tt.id}>{tt.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {addMode === 'personal' && (
-              <div>
-                <Label className="text-xs">Клиент</Label>
-                <select value={form.personalClientId} onChange={e => setForm(f => ({ ...f, personalClientId: e.target.value }))}
-                  className="w-full h-8 text-sm border border-input rounded-md px-2 bg-white">
-                  <option value="">Выберите клиента...</option>
-                  {state.clients.filter(c => c.branchId === state.currentBranchId).map(c => (
-                    <option key={c.id} value={c.id}>{c.lastName} {c.firstName}</option>
                   ))}
                 </select>
               </div>

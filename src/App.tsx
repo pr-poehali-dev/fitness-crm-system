@@ -91,7 +91,7 @@ export default function App() {
       case 'branches': return <Branches store={store} />;
       case 'staff': return <Staff store={store} />;
       case 'settings': return <Settings store={store} />;
-      case 'notifications': return <Notifications store={store} />;
+      case 'notifications': return <Notifications store={store} onSell={handleSell} />;
       default: return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
     }
   };

@@ -86,7 +86,7 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
             <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
               <Icon name="Dumbbell" size={14} className="text-primary-foreground" />
             </div>
-            <span className="font-semibold text-sm tracking-tight">FitCRM</span>
+            <span className="font-semibold text-sm tracking-tight">Рельеф-СРМ</span>
           </div>
           <select
             value={state.currentBranchId}

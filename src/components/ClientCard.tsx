@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+
+const CHANNELS = ['whatsapp', 'telegram', 'phone', 'instagram', 'vk'];
+const REFERRALS = ['Друзья', 'Интернет', 'Мимо проходил(а)', 'Блогер', 'Реклама', 'Другое'];
+const AD_SOURCES = ['Instagram', 'VK', 'Яндекс', 'Google', 'Листовка', 'Сарафанное радио', 'Другое'];
 
 interface ClientCardProps {
   client: Client;
@@ -18,13 +23,20 @@ const CHANNEL_ICONS: Record<string, string> = {
 };
 
 export default function ClientCard({ client, store, onClose, onSell }: ClientCardProps) {
-  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient } = store;
+  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [freezeDays, setFreezeDays] = useState(7);
   const [extendDays, setExtendDays] = useState(0);
   const [extendSessions, setExtendSessions] = useState(0);
   const [showEnroll, setShowEnroll] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    firstName: client.firstName, lastName: client.lastName, middleName: client.middleName,
+    phone: client.phone, contactChannel: client.contactChannel,
+    referralSource: client.referralSource, adSource: client.adSource,
+    birthDate: client.birthDate, comment: client.comment,
+  });
 
   const cat = getClientCategory(client);
   const sub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
@@ -106,9 +118,14 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
             {client.fromBranchId && <span className="text-xs text-amber-600">другой филиал</span>}
           </div>
         </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-          <Icon name="X" size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowEdit(true)} className="text-muted-foreground hover:text-foreground p-1" title="Редактировать">
+            <Icon name="Pencil" size={15} />
+          </button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <Icon name="X" size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -292,6 +309,70 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               </div>
             )}
             <Button onClick={handleExtend} className="w-full bg-foreground text-primary-foreground">Применить</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit client modal */}
+      <Dialog open={showEdit} onOpenChange={v => { if (!v) setShowEdit(false); }}>
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Редактировать клиента</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Фамилия</Label>
+                <Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Имя</Label>
+                <Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Отчество</Label>
+              <Input value={editForm.middleName} onChange={e => setEditForm(f => ({ ...f, middleName: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Телефон</Label>
+              <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Канал связи</Label>
+              <select value={editForm.contactChannel} onChange={e => setEditForm(f => ({ ...f, contactChannel: e.target.value as Client['contactChannel'] }))}
+                className="w-full h-9 text-sm border border-input rounded-md px-2 bg-white">
+                {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Дата рождения</Label>
+              <Input type="date" value={editForm.birthDate} onChange={e => setEditForm(f => ({ ...f, birthDate: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Источник (откуда узнал)</Label>
+              <select value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
+                className="w-full h-9 text-sm border border-input rounded-md px-2 bg-white">
+                <option value="">—</option>
+                {REFERRALS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Рекламный канал</Label>
+              <select value={editForm.adSource} onChange={e => setEditForm(f => ({ ...f, adSource: e.target.value }))}
+                className="w-full h-9 text-sm border border-input rounded-md px-2 bg-white">
+                <option value="">—</option>
+                {AD_SOURCES.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Комментарий</Label>
+              <Textarea value={editForm.comment} onChange={e => setEditForm(f => ({ ...f, comment: e.target.value }))} rows={2} />
+            </div>
+            <Button
+              onClick={() => { updateClient(client.id, editForm); setShowEdit(false); }}
+              className="w-full bg-foreground text-primary-foreground"
+            >
+              Сохранить
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
