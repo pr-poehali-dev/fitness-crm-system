@@ -327,33 +327,44 @@ function ExpensePlanTab({ state, setExpensePlan }: ExpensePlanTabProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
-                  {branchCats.map(cat => (
-                    <th key={cat.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">{cat.name}</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[160px] z-10">Категория</th>
+                  {months.map((_, i) => (
+                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[70px]">{MONTH_NAMES_SHORT[i]}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {months.map((month, i) => (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES_SHORT[i]}
+                {branchCats.map((cat, ri) => (
+                  <tr key={cat.id} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap text-xs"
+                      style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {cat.name}
                     </td>
-                    {branchCats.map(cat => (
-                      <td key={cat.id} className="px-2 py-1.5">
+                    {months.map(month => (
+                      <td key={month} className="px-1.5 py-1.5">
                         <Input
                           type="number"
                           min={0}
                           placeholder="0"
                           value={values[month]?.[cat.id] ?? ''}
                           onChange={e => handleChange(month, cat.id, e.target.value)}
-                          className="text-center text-xs h-8"
+                          className="text-center text-xs h-7 px-1"
                         />
                       </td>
                     ))}
                   </tr>
                 ))}
+                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground text-xs" style={{ background: 'rgb(243 244 246)' }}>Итого, ₽</td>
+                  {months.map(month => {
+                    const total = branchCats.reduce((sum, cat) => sum + (parseFloat(values[month]?.[cat.id] ?? '0') || 0), 0);
+                    return (
+                      <td key={month} className="px-2 py-2 text-center text-xs font-semibold">
+                        {total > 0 ? total.toLocaleString() : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
