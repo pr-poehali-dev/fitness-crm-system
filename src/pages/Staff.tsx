@@ -426,45 +426,7 @@ export default function Staff({ store }: StaffProps) {
         </Dialog>
       )}
 
-      {/* Invite link modal */}
-      {inviteModalId && (
-        <Dialog open={true} onOpenChange={() => setInviteModalId(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Ссылка для входа — {state.staff.find(m => m.id === inviteModalId)?.name}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Отправьте эту ссылку сотруднику. По клику он автоматически войдёт в систему без пароля.
-              </p>
-              <div className="flex gap-2">
-                <div className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground break-all font-mono">
-                  {inviteLink}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={copyInviteLink}
-                  className={`flex-1 ${linkCopied ? 'bg-emerald-500 hover:bg-emerald-500' : 'bg-foreground hover:opacity-90'} text-primary-foreground`}
-                >
-                  <Icon name={linkCopied ? 'Check' : 'Copy'} size={14} className="mr-1.5" />
-                  {linkCopied ? 'Скопировано!' : 'Скопировать'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => regenerateLink(inviteModalId)}
-                  title="Сгенерировать новую ссылку (старая перестанет работать)"
-                >
-                  <Icon name="RefreshCw" size={14} />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Кнопка <Icon name="RefreshCw" size={11} className="inline" /> сбросит старую ссылку и создаст новую.
-              </p>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
 
       {/* Permissions editor */}
       {editingMember && permsForm && (
