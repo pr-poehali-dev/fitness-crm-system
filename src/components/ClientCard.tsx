@@ -46,7 +46,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const branch = state.branches.find(b => b.id === client.branchId);
 
   // Metrics
-  const totalSpent = sales.reduce((sum, s) => sum + s.finalPrice, 0);
+  const totalSpent = sales.reduce((sum, s) => sum + s.finalPrice, 0) + (client.importedSpent || 0);
   const attendedVisits = visits.filter(v => v.status === 'attended');
   // Visits per week: count last 4 weeks
   const fourWeeksAgo = new Date(); fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);

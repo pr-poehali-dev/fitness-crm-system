@@ -45,7 +45,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
   const returnSubs = monthSubSales.filter(s => s.isReturn).length;
 
-  const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
+  const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId && !c.dashboardExclude);
   const newClientsMonth = branchClients.filter(c => inPeriod(c.createdAt)).length;
   const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).length;
   const totalInquiries = monthInquiries + newClientsMonth;

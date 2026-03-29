@@ -684,6 +684,53 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto">
+              {!selectedEntry.isPersonal && (
+                <>
+                  <div className="px-4 py-3 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Записать клиента
+                  </div>
+                  <div className="px-4 pb-3 border-b border-border">
+                    <Input
+                      placeholder="Поиск клиента..."
+                      value={enrollSearch}
+                      onChange={e => setEnrollSearch(e.target.value)}
+                      className="h-8 text-sm mt-2"
+                    />
+                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                      {filteredClients.slice(0, 20).map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => enrollClientMaybeOtherBranch(selectedEntry.id, c.id)}
+                          className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-secondary transition-colors"
+                        >
+                          <span>{c.lastName} {c.firstName}</span>
+                          {c.isOtherBranch && (
+                            <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                              {state.branches.find(b => b.id === c.branchId)?.name}
+                            </span>
+                          )}
+                          <span className="text-muted-foreground ml-1">· {c.phone}</span>
+                        </button>
+                      ))}
+                      {filteredClients.length === 0 && enrollSearch && (
+                        <div className="text-xs text-muted-foreground px-2 py-2">Клиент не найден</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const guestCount = (selectedEntry.guestCount || 0) + 1;
+                        const total = selectedEntry.enrolledClientIds.length + guestCount;
+                        if (total > selectedEntry.maxCapacity) return;
+                        updateScheduleEntry(selectedEntry.id, { guestCount });
+                      }}
+                      disabled={(selectedEntry.enrolledClientIds.length + (selectedEntry.guestCount || 0)) >= selectedEntry.maxCapacity}
+                      className="mt-2 w-full py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40"
+                    >
+                      + Гость (без клиента в базе)
+                    </button>
+                  </div>
+                </>
+              )}
               <div className="px-4 py-3 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Записанные ({selectedEntry.enrolledClientIds.length + (selectedEntry.guestCount || 0)} / {selectedEntry.maxCapacity})
               </div>
@@ -794,54 +841,6 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 );
               })}
 
-              {!selectedEntry.isPersonal && (
-                <>
-                  <div className="px-4 py-3 border-t border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Записать клиента
-                  </div>
-                  <div className="px-4 pb-3">
-                    <Input
-                      placeholder="Поиск клиента..."
-                      value={enrollSearch}
-                      onChange={e => setEnrollSearch(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                      {filteredClients.slice(0, 20).map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => enrollClientMaybeOtherBranch(selectedEntry.id, c.id)}
-                          className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-secondary transition-colors"
-                        >
-                          <span>{c.lastName} {c.firstName}</span>
-                          {c.isOtherBranch && (
-                            <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                              {state.branches.find(b => b.id === c.branchId)?.name}
-                            </span>
-                          )}
-                          <span className="text-muted-foreground ml-1">· {c.phone}</span>
-                        </button>
-                      ))}
-                      {filteredClients.length === 0 && enrollSearch && (
-                        <div className="text-xs text-muted-foreground px-2 py-2">Клиент не найден</div>
-                      )}
-                    </div>
-                    {/* Кнопка добавить гостя без клиента */}
-                    <button
-                      onClick={() => {
-                        const guestCount = (selectedEntry.guestCount || 0) + 1;
-                        const total = selectedEntry.enrolledClientIds.length + guestCount;
-                        if (total > selectedEntry.maxCapacity) return;
-                        updateScheduleEntry(selectedEntry.id, { guestCount });
-                      }}
-                      disabled={(selectedEntry.enrolledClientIds.length + (selectedEntry.guestCount || 0)) >= selectedEntry.maxCapacity}
-                      className="mt-2 w-full py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40"
-                    >
-                      + Гость (без клиента в базе)
-                    </button>
-                  </div>
-                </>
-              )}
             </div>
           </div>
         );
