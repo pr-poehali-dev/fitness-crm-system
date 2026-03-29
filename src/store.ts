@@ -274,7 +274,6 @@ export interface StaffMember {
   createdAt: string;
   password?: string;
   login?: string;
-  inviteToken?: string;
 }
 
 export const ROLE_LABELS: Record<StaffRole, string> = {
@@ -493,7 +492,6 @@ export interface AppState {
   dismissedNotifications: string[]; // ключи вида `${categoryKey}:${clientId}:${date}`
   failedNotifications: Record<string, string>; // key -> причина
   notificationCategories: NotificationCategory[];
-  accessToken?: string; // общий токен для входа сотрудников
   importedCvetnoiV1?: boolean;
   importedCvetnoiV2?: boolean;
   importedCvetnoiV3?: boolean;
@@ -1947,16 +1945,7 @@ export function useStore() {
   const setCurrentStaff = (staffId: string) => {
     update(s => ({ ...s, currentStaffId: staffId }));
   };
-  const generateInviteToken = (staffId: string) => {
-    const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    update(s => ({ ...s, staff: s.staff.map(m => m.id === staffId ? { ...m, inviteToken: token } : m) }));
-    return token;
-  };
-  const regenerateAccessToken = () => {
-    const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    update(s => ({ ...s, accessToken: token }));
-    return token;
-  };
+
 
   // Helpers
   const getClientCategory = (client: Client): ClientCategory => {
@@ -1991,7 +1980,7 @@ export function useStore() {
     addTrainingType, updateTrainingType, removeTrainingType,
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
-    addStaff, updateStaff, removeStaff, setCurrentStaff, generateInviteToken, regenerateAccessToken,
+    addStaff, updateStaff, removeStaff, setCurrentStaff,
     addInquiry,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
