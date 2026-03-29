@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import ClientCard from '@/components/ClientCard';
 
 interface NotificationsProps {
@@ -31,9 +35,28 @@ function useNow() {
 }
 
 export default function Notifications({ store, onSell }: NotificationsProps & { onSell?: (clientId: string) => void }) {
-  const { state, getClientCategory: _gc, getClientFullName, dismissNotification, restoreNotification } = store;
+  const { state, getClientCategory: _gc, getClientFullName, dismissNotification, restoreNotification, failNotification } = store;
   const now = useNow();
   const [openClientId, setOpenClientId] = useState<string | null>(null);
+
+  // Фильтр по периоду
+  const fmtDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const monthStart = fmtDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthEnd = fmtDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const [periodFrom, setPeriodFrom] = useState(monthStart);
+  const [periodTo, setPeriodTo] = useState(monthEnd);
+
+  // "Не выполнено" диалог
+  const [failDialog, setFailDialog] = useState<{ key: string; name: string } | null>(null);
+  const [failReason, setFailReason] = useState('');
+
+  const [showDone, setShowDone] = useState(false);
+  const [showFailed, setShowFailed] = useState(false);
 
   const fmt = (d: Date) => d.toISOString().split('T')[0];
   const todayStr = fmt(now);
@@ -264,8 +287,10 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
   }, [now, state.clients, state.subscriptions, state.visits, state.sales, state.schedule, state.notificationCategories, state.currentBranchId]);
 
   const dismissed = new Set(state.dismissedNotifications);
+  const failedMap: Record<string, string> = state.failedNotifications ?? {};
   const activeNotifications = notifications.filter(n => !dismissed.has(n.key));
-  const doneNotifications = notifications.filter(n => dismissed.has(n.key));
+  const doneNotifications = notifications.filter(n => dismissed.has(n.key) && !failedMap[n.key]);
+  const failedNotifications = notifications.filter(n => dismissed.has(n.key) && failedMap[n.key]);
 
   const groupedReasons = state.notificationCategories.map(cat => ({
     cat,
@@ -273,23 +298,107 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
   })).filter(g => g.items.length > 0);
 
   const totalCount = activeNotifications.length;
-  const [showDone, setShowDone] = useState(false);
+  const totalProcessed = doneNotifications.length + failedNotifications.length;
+  const donePercent = totalProcessed > 0 ? Math.round(doneNotifications.length / totalProcessed * 100) : 0;
+  const failedPercent = totalProcessed > 0 ? Math.round(failedNotifications.length / totalProcessed * 100) : 0;
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Уведомления</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Клиенты, требующие внимания сегодня
-          </p>
-        </div>
-        {totalCount > 0 && (
-          <span className="bg-red-500 text-white text-sm font-semibold px-3 py-1 rounded-full">{totalCount}</span>
+  const handleFail = () => {
+    if (!failDialog || !failReason.trim()) return;
+    failNotification(failDialog.key, failReason.trim());
+    setFailDialog(null);
+    setFailReason('');
+  };
+
+  const renderItem = (item: NotificationItem, isDone = false) => (
+    <div key={item.key} className="flex items-start gap-3 px-4 py-3">
+      <div className="flex-1 min-w-0">
+        <button
+          onClick={() => setOpenClientId(item.clientId)}
+          className={`text-sm font-medium text-left hover:underline ${isDone ? 'line-through text-muted-foreground' : ''}`}
+        >
+          {item.name}
+        </button>
+        <div className="text-xs text-muted-foreground mt-0.5">{item.phone}</div>
+        {isDone && failedMap[item.key] && (
+          <div className="text-xs text-red-500 mt-0.5 flex items-center gap-1">
+            <Icon name="AlertCircle" size={11} />
+            Причина: {failedMap[item.key]}
+          </div>
+        )}
+        {!isDone && item.detail && (
+          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <Icon name="Info" size={11} />
+            {item.detail}
+          </div>
         )}
       </div>
+      {isDone ? (
+        <button
+          onClick={() => restoreNotification(item.key)}
+          title="Вернуть в список"
+          className={`flex-shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center hover:opacity-80 transition-colors ${failedMap[item.key] ? 'bg-red-100 border-red-400' : 'bg-emerald-100 border-emerald-400'}`}
+        >
+          <Icon name={failedMap[item.key] ? 'X' : 'Check'} size={12} className={failedMap[item.key] ? 'text-red-600' : 'text-emerald-600'} />
+        </button>
+      ) : (
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          <button
+            onClick={() => dismissNotification(item.key)}
+            title="Выполнено"
+            className="w-6 h-6 rounded-full border-2 border-border hover:border-emerald-500 hover:bg-emerald-50 transition-colors flex items-center justify-center"
+          >
+            <Icon name="Check" size={12} className="text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => { setFailDialog({ key: item.key, name: item.name }); setFailReason(''); }}
+            title="Не выполнено"
+            className="w-6 h-6 rounded-full border-2 border-border hover:border-red-400 hover:bg-red-50 transition-colors flex items-center justify-center"
+          >
+            <Icon name="X" size={12} className="text-muted-foreground" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
-      {totalCount === 0 && doneNotifications.length === 0 && (
+  return (
+    <div className="space-y-4 animate-fade-in">
+      {/* Заголовок + период */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-lg font-semibold">Уведомления</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Клиенты, требующие внимания</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className="h-8 text-xs w-36" />
+            <span className="text-muted-foreground text-xs">—</span>
+            <Input type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)} className="h-8 text-xs w-36" />
+          </div>
+          {totalCount > 0 && (
+            <span className="bg-red-500 text-white text-sm font-semibold px-3 py-1 rounded-full">{totalCount}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Счётчик выполнено/не выполнено */}
+      {totalProcessed > 0 && (
+        <div className="bg-white border border-border rounded-xl px-4 py-3 flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-emerald-400" />
+            <span className="text-sm">Выполнено: <strong>{doneNotifications.length}</strong> <span className="text-muted-foreground text-xs">({donePercent}%)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-400" />
+            <span className="text-sm">Не выполнено: <strong>{failedNotifications.length}</strong> <span className="text-muted-foreground text-xs">({failedPercent}%)</span></span>
+          </div>
+          <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden ml-2">
+            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${donePercent}%` }} />
+          </div>
+        </div>
+      )}
+
+      {totalCount === 0 && totalProcessed === 0 && (
         <div className="bg-white border border-border rounded-xl py-16 text-center">
           <Icon name="CheckCircle" size={40} className="text-emerald-400 mx-auto mb-3" />
           <div className="text-muted-foreground">Всё спокойно — уведомлений нет</div>
@@ -304,32 +413,7 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
             <span className="ml-auto text-xs font-semibold bg-foreground text-primary-foreground px-2 py-0.5 rounded-full">{items.length}</span>
           </div>
           <div className="divide-y divide-border/60">
-            {items.map(item => (
-              <div key={item.key} className="flex items-start gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <button
-                    onClick={() => setOpenClientId(item.clientId)}
-                    className="text-sm font-medium hover:underline hover:text-foreground text-left"
-                  >
-                    {item.name}
-                  </button>
-                  <div className="text-xs text-muted-foreground mt-0.5">{item.phone}</div>
-                  {item.detail && (
-                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Icon name="Info" size={11} />
-                      {item.detail}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => dismissNotification(item.key)}
-                  title="Отметить выполненным"
-                  className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 border-border hover:border-emerald-500 hover:bg-emerald-50 transition-colors flex items-center justify-center"
-                >
-                  <Icon name="Check" size={12} className="text-muted-foreground" />
-                </button>
-              </div>
-            ))}
+            {items.map(item => renderItem(item))}
           </div>
         </div>
       ))}
@@ -352,33 +436,58 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
         );
       })()}
 
+      {/* Диалог "не выполнено" */}
+      <Dialog open={!!failDialog} onOpenChange={v => { if (!v) { setFailDialog(null); setFailReason(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Не выполнено — укажите причину</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">{failDialog?.name}</div>
+            <div>
+              <Label className="text-xs mb-1 block">Причина *</Label>
+              <Textarea
+                value={failReason}
+                onChange={e => setFailReason(e.target.value)}
+                placeholder="Не дозвонился, клиент отказался и т.д."
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setFailDialog(null); setFailReason(''); }} className="flex-1">Отмена</Button>
+              <Button onClick={handleFail} disabled={!failReason.trim()} className="flex-1 bg-red-500 hover:bg-red-600 text-white">Сохранить</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Выполнено */}
       {doneNotifications.length > 0 && (
         <div>
-          <button
-            onClick={() => setShowDone(v => !v)}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={() => setShowDone(v => !v)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <Icon name={showDone ? 'ChevronUp' : 'ChevronDown'} size={14} />
             Выполнено ({doneNotifications.length})
           </button>
           {showDone && (
-            <div className="mt-2 bg-white border border-border rounded-xl overflow-hidden opacity-60">
+            <div className="mt-2 bg-white border border-border rounded-xl overflow-hidden opacity-70">
               <div className="divide-y divide-border/60">
-                {doneNotifications.map(item => (
-                  <div key={item.key} className="flex items-start gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium line-through text-muted-foreground">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{item.reason}</div>
-                    </div>
-                    <button
-                      onClick={() => restoreNotification(item.key)}
-                      title="Вернуть в список"
-                      className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center hover:bg-emerald-200 transition-colors"
-                    >
-                      <Icon name="Check" size={12} className="text-emerald-600" />
-                    </button>
-                  </div>
-                ))}
+                {doneNotifications.map(item => renderItem(item, true))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Не выполнено */}
+      {failedNotifications.length > 0 && (
+        <div>
+          <button onClick={() => setShowFailed(v => !v)} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
+            <Icon name={showFailed ? 'ChevronUp' : 'ChevronDown'} size={14} />
+            Не выполнено ({failedNotifications.length})
+          </button>
+          {showFailed && (
+            <div className="mt-2 bg-white border border-red-200 rounded-xl overflow-hidden opacity-70">
+              <div className="divide-y divide-border/60">
+                {failedNotifications.map(item => renderItem(item, true))}
               </div>
             </div>
           )}
