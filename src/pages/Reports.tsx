@@ -849,10 +849,17 @@ export default function Reports({ store }: ReportsProps) {
                       </tr>
                     ))}
                     <tr className="border-t-2 border-border bg-blue-50 font-semibold">
-                      <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
-                      {months.map(month => {
-                        const col = COLUMNS[0];
-                        return <td key={month} className="border-l border-border/20" />;
+                      <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого / среднее</td>
+                      {COLUMNS.map(col => {
+                        const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter((v): v is number => v !== undefined && v !== 0);
+                        const total = col.format === 'pct' || col.key === 'avgCheck'
+                          ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined)
+                          : vals.reduce((a, b) => a + b, 0);
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-center text-blue-900 tabular-nums border-l border-border/20">
+                            {total !== undefined && total !== 0 ? fmt(total, col.format) : <span className="text-muted-foreground/30">—</span>}
+                          </td>
+                        );
                       })}
                     </tr>
                   </tbody>
@@ -902,9 +909,17 @@ export default function Reports({ store }: ReportsProps) {
                       </tr>
                     ))}
                     <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                      <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                      {months.map(month => {
-                        return <td key={month} className="border-l border-border/20" />;
+                      <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого / среднее</td>
+                      {COLUMNS.map(col => {
+                        const vals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => v !== undefined && !isNaN(v) && v !== 0);
+                        const total = col.format === 'pct' || col.key === 'avgCheck'
+                          ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0)
+                          : vals.reduce((a, b) => a + b, 0);
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-center tabular-nums border-l border-border/20">
+                            {total !== 0 ? fmt(total, col.format) : <span className="text-muted-foreground/30">—</span>}
+                          </td>
+                        );
                       })}
                     </tr>
                   </tbody>
