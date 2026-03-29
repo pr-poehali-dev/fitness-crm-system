@@ -20,7 +20,8 @@ export interface Trainer {
   id: string;
   name: string;
   specialty: string;
-  branchId: string;
+  branchId: string;        // основной филиал
+  branchIds: string[];     // все филиалы где доступен тренер
 }
 
 export interface TrainingCategory {
@@ -38,6 +39,9 @@ export interface TrainingType {
   branchIds: string[];
   color: string;
   categoryId?: string;
+  // Доплата: если задана — при отметке "пришёл" требуется провести дополнительную продажу
+  extraPrice?: number | null;
+  extraPriceName?: string | null;
 }
 
 export interface SubscriptionPlan {
@@ -114,6 +118,7 @@ export interface ScheduleEntry {
   time: string;
   maxCapacity: number;
   enrolledClientIds: string[];
+  guestCount?: number;     // кол-во «пустых» мест (без клиента в базе)
   hallId?: string;
   isPersonal?: boolean;
   personalClientId?: string;
@@ -133,7 +138,7 @@ export interface Visit {
 export interface Sale {
   id: string;
   clientId: string;
-  type: 'subscription' | 'single';
+  type: 'subscription' | 'single' | 'extra';
   itemId: string;
   itemName: string;
   price: number;
@@ -339,9 +344,9 @@ const defaultHalls: Hall[] = [
 ];
 
 const defaultTrainers: Trainer[] = [
-  { id: 't1', name: 'Иванова Анна Сергеевна', specialty: 'Йога, Пилатес', branchId: 'b1' },
-  { id: 't2', name: 'Петров Дмитрий Владимирович', specialty: 'Силовые, Кроссфит', branchId: 'b1' },
-  { id: 't3', name: 'Сидорова Мария Андреевна', specialty: 'Зумба, Аэробика', branchId: 'b2' },
+  { id: 't1', name: 'Иванова Анна Сергеевна', specialty: 'Йога, Пилатес', branchId: 'b1', branchIds: ['b1'] },
+  { id: 't2', name: 'Петров Дмитрий Владимирович', specialty: 'Силовые, Кроссфит', branchId: 'b1', branchIds: ['b1'] },
+  { id: 't3', name: 'Сидорова Мария Андреевна', specialty: 'Зумба, Аэробика', branchId: 'b2', branchIds: ['b2'] },
 ];
 
 const defaultTrainingCategories: TrainingCategory[] = [
@@ -526,7 +531,16 @@ function loadState(): AppState {
         autoActivateDays: p.autoActivateDays ?? null,
         ...p,
       }));
-      return { ...initialState, ...parsed, subscriptions, subscriptionPlans, singleVisitPlans };
+      const trainers = (parsed.trainers || []).map((t: Trainer) => ({
+        branchIds: t.branchIds ?? [t.branchId],
+        ...t,
+      }));
+      const trainingTypes = (parsed.trainingTypes || []).map((tt: TrainingType) => ({
+        extraPrice: tt.extraPrice ?? null,
+        extraPriceName: tt.extraPriceName ?? null,
+        ...tt,
+      }));
+      return { ...initialState, ...parsed, subscriptions, subscriptionPlans, singleVisitPlans, trainers, trainingTypes };
     }
   } catch (e) { /* ignore */ }
   return initialState;
@@ -624,6 +638,18 @@ export function useStore() {
       id: saleId, clientId, type: 'single', itemId: planId, itemName: plan.name,
       price: plan.price, discount: 0, finalPrice: plan.price, paymentMethod,
       date: fmt(new Date()), branchId: plan.branchId,
+      isFirstSubscription: false, isReturn: false, isRenewal: false
+    };
+    update(s => ({ ...s, sales: [...s.sales, newSale] }));
+  };
+
+  // Продажа доплаты (extra) за конкретную тренировку
+  const sellExtra = (clientId: string, itemName: string, price: number, paymentMethod: 'cash' | 'card', branchId: string) => {
+    const saleId = genId();
+    const newSale: Sale = {
+      id: saleId, clientId, type: 'extra', itemId: 'extra', itemName,
+      price, discount: 0, finalPrice: price, paymentMethod,
+      date: fmt(new Date()), branchId,
       isFirstSubscription: false, isReturn: false, isRenewal: false
     };
     update(s => ({ ...s, sales: [...s.sales, newSale] }));
@@ -955,7 +981,7 @@ export function useStore() {
   return {
     state,
     addClient, updateClient, addClientToBranch,
-    sellSubscription, sellSingleVisit,
+    sellSubscription, sellSingleVisit, sellExtra,
     freezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,
     autoActivatePendingSubscriptions,

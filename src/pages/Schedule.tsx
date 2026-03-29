@@ -27,7 +27,7 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const NO_HALL_ID = '__no_hall__';
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
-  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch } = store;
+  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch, sellExtra } = store;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHallId, setSelectedHallId] = useState<string>(NO_HALL_ID);
@@ -50,6 +50,14 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   const [selectedBasis, setSelectedBasis] = useState<
     { type: 'subscription'; subId: string } | { type: 'single'; planId: string } | null
   >(null);
+
+  // Модал доплаты (extra): показывается после выбора основания если у тренировки есть extraPrice
+  const [extraModal, setExtraModal] = useState<{
+    clientId: string; entryId: string; visitId: string;
+    subscriptionId: string | null; isSingleVisit: boolean; singlePrice: number;
+    extraPrice: number; extraPriceName: string;
+  } | null>(null);
+  const [extraPaymentMethod, setExtraPaymentMethod] = useState<'cash' | 'card'>('card');
 
 
 
@@ -210,9 +218,40 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     const singlePlan = isSingle && selectedBasis.type === 'single'
       ? state.singleVisitPlans.find(p => p.id === selectedBasis.planId) : null;
     const visit = state.visits.find(v => v.clientId === attendModal.clientId && v.scheduleEntryId === attendModal.entryId);
+    const entry = state.schedule.find(e => e.id === attendModal.entryId);
+    const tt = entry ? state.trainingTypes.find(t => t.id === entry.trainingTypeId) : null;
+    const extraPrice = tt?.extraPrice ?? null;
+
+    if (extraPrice && extraPrice > 0) {
+      // Требуется доплата — показываем модал оплаты
+      setExtraModal({
+        clientId: attendModal.clientId,
+        entryId: attendModal.entryId,
+        visitId: visit?.id || attendModal.visitId,
+        subscriptionId: subId,
+        isSingleVisit: isSingle,
+        singlePrice: singlePlan?.price || 0,
+        extraPrice,
+        extraPriceName: tt?.extraPriceName || 'Доплата',
+      });
+      setAttendModal(null);
+      setSelectedBasis(null);
+      return;
+    }
+
     markVisit(visit?.id || attendModal.visitId, 'attended', subId, isSingle, singlePlan?.price || 0);
     setAttendModal(null);
     setSelectedBasis(null);
+  };
+
+  const handleConfirmExtra = () => {
+    if (!extraModal) return;
+    // Сначала отмечаем посещение
+    markVisit(extraModal.visitId, 'attended', extraModal.subscriptionId, extraModal.isSingleVisit, extraModal.singlePrice);
+    // Потом проводим доплату
+    sellExtra(extraModal.clientId, extraModal.extraPriceName, extraModal.extraPrice, extraPaymentMethod, state.currentBranchId);
+    setExtraModal(null);
+    setExtraPaymentMethod('card');
   };
 
   const handleMarkVisit = (clientId: string, entryId: string, status: 'missed' | 'cancelled') => {
@@ -251,10 +290,15 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       if (!plan) return false;
       return plan.allDirections || (tt ? plan.trainingTypeIds.includes(tt.id) : false);
     });
-    const singles = state.singleVisitPlans.filter(p =>
-      p.branchId === state.currentBranchId &&
-      (tt ? p.trainingTypeIds.includes(tt.id) || p.trainingTypeIds.length === 0 : true)
-    );
+    const singles = state.singleVisitPlans.filter(p => {
+      if (p.branchId !== state.currentBranchId) return false;
+      if (tt && p.trainingTypeIds.length > 0 && !p.trainingTypeIds.includes(tt.id)) return false;
+      // Проверяем что по этому planId не исчерпаны все купленные разовые
+      const purchasedCount = state.sales.filter(s => s.clientId === clientId && s.type === 'single' && s.itemId === p.id).length;
+      const usedCount = state.visits.filter(v => v.clientId === clientId && v.isSingleVisit && v.status === 'attended' && v.price === p.price).length;
+      // Есть хотя бы одно неиспользованное
+      return purchasedCount > usedCount;
+    });
     return { subscriptions: activeSubs, singles };
   };
 
@@ -409,7 +453,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     }
   };
 
-  const branchTrainers = state.trainers.filter(t => t.branchId === state.currentBranchId);
+  const branchTrainers = state.trainers.filter(t => (t.branchIds ?? [t.branchId]).includes(state.currentBranchId));
 
   const openClientCard = state.clients.find(c => c.id === openClientId);
   if (openClientCard) {
@@ -527,7 +571,8 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                                 const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
                                 const color = entry.isPersonal ? '#8b5cf6' : getEntryColor(entry.trainingTypeId);
                                 const isSelected = selectedEntryId === entry.id;
-                                const fillPct = entry.maxCapacity > 0 ? (entry.enrolledClientIds.length / entry.maxCapacity) * 100 : 0;
+                                const totalEnrolled = entry.enrolledClientIds.length + (entry.guestCount || 0);
+                                const fillPct = entry.maxCapacity > 0 ? (totalEnrolled / entry.maxCapacity) * 100 : 0;
                                 const personalClient = entry.isPersonal && entry.personalClientId
                                   ? state.clients.find(c => c.id === entry.personalClientId) : null;
                                 const trainerName = state.trainers.find(t => t.id === entry.trainerId)?.name || '';
@@ -549,7 +594,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                                       <>
                                         <div className="text-xs font-medium text-foreground leading-tight truncate">{tt?.name}</div>
                                         <div className="text-xs text-muted-foreground mt-0.5 truncate">{trainerName}</div>
-                                        <div className="text-xs text-muted-foreground">{entry.enrolledClientIds.length}/{entry.maxCapacity}</div>
+                                        <div className="text-xs text-muted-foreground">{totalEnrolled}/{entry.maxCapacity}</div>
                                         <div className="w-full h-0.5 bg-white/50 rounded-full mt-1 overflow-hidden">
                                           <div className="h-full rounded-full" style={{ width: `${fillPct}%`, background: color }} />
                                         </div>
@@ -638,11 +683,26 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
 
             <div className="flex-1 overflow-y-auto">
               <div className="px-4 py-3 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Записанные ({selectedEntry.enrolledClientIds.length})
+                Записанные ({selectedEntry.enrolledClientIds.length + (selectedEntry.guestCount || 0)} / {selectedEntry.maxCapacity})
               </div>
-              {selectedEntry.enrolledClientIds.length === 0 && (
+              {selectedEntry.enrolledClientIds.length === 0 && !selectedEntry.guestCount && (
                 <div className="px-4 py-6 text-center text-sm text-muted-foreground">Никто не записан</div>
               )}
+              {/* Гости без клиента */}
+              {(selectedEntry.guestCount || 0) > 0 && Array.from({ length: selectedEntry.guestCount || 0 }).map((_, i) => (
+                <div key={`guest-${i}`} className="px-4 py-2 border-b border-border/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Icon name="UserX" size={14} className="text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground italic">Гость #{i + 1}</span>
+                  </div>
+                  <button
+                    onClick={() => updateScheduleEntry(selectedEntry.id, { guestCount: Math.max(0, (selectedEntry.guestCount || 0) - 1) })}
+                    className="text-xs text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              ))}
               {selectedEntry.enrolledClientIds.map(clientId => {
                 const client = state.clients.find(c => c.id === clientId);
                 const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === selectedEntry.id);
@@ -763,6 +823,19 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                         <div className="text-xs text-muted-foreground px-2 py-2">Клиент не найден</div>
                       )}
                     </div>
+                    {/* Кнопка добавить гостя без клиента */}
+                    <button
+                      onClick={() => {
+                        const guestCount = (selectedEntry.guestCount || 0) + 1;
+                        const total = selectedEntry.enrolledClientIds.length + guestCount;
+                        if (total > selectedEntry.maxCapacity) return;
+                        updateScheduleEntry(selectedEntry.id, { guestCount });
+                      }}
+                      disabled={(selectedEntry.enrolledClientIds.length + (selectedEntry.guestCount || 0)) >= selectedEntry.maxCapacity}
+                      className="mt-2 w-full py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40"
+                    >
+                      + Гость (без клиента в базе)
+                    </button>
                   </div>
                 </>
               )}
@@ -987,6 +1060,38 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Модал доплаты */}
+      <Dialog open={!!extraModal} onOpenChange={v => { if (!v) setExtraModal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Доплата за тренировку</DialogTitle>
+          </DialogHeader>
+          {extraModal && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="text-sm font-medium text-amber-800">{extraModal.extraPriceName}</div>
+                <div className="text-xl font-bold text-amber-900 mt-1">{extraModal.extraPrice.toLocaleString()} ₽</div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Способ оплаты</Label>
+                <div className="flex gap-2">
+                  {(['cash', 'card'] as const).map(m => (
+                    <button key={m} onClick={() => setExtraPaymentMethod(m)}
+                      className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${extraPaymentMethod === m ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
+                      {m === 'cash' ? '💵 Наличные' : '💳 Безнал'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setExtraModal(null)} className="flex-1">Отмена</Button>
+                <Button onClick={handleConfirmExtra} className="flex-1 bg-foreground text-primary-foreground">Оплатить и отметить</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

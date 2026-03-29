@@ -487,7 +487,7 @@ export default function Settings({ store }: SettingsProps) {
 
   const [showAddTraining, setShowAddTraining] = useState(false);
   const [editingTT, setEditingTT] = useState<TrainingType | null>(null);
-  const [ttForm, setTtForm] = useState({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '' });
+  const [ttForm, setTtForm] = useState({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '', extraPrice: '' as string | number, extraPriceName: '' });
 
   const [showAddTC, setShowAddTC] = useState(false);
   const [editingTC, setEditingTC] = useState<TrainingCategory | null>(null);
@@ -495,7 +495,7 @@ export default function Settings({ store }: SettingsProps) {
 
   const [showAddTrainer, setShowAddTrainer] = useState(false);
   const [editingTrainer, setEditingTrainer] = useState<Trainer | null>(null);
-  const [trainerForm, setTrainerForm] = useState({ name: '', specialty: '', branchId: state.currentBranchId });
+  const [trainerForm, setTrainerForm] = useState({ name: '', specialty: '', branchId: state.currentBranchId, branchIds: [state.currentBranchId] });
 
   const [showAddHall, setShowAddHall] = useState(false);
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
@@ -548,12 +548,14 @@ export default function Settings({ store }: SettingsProps) {
   const branchHalls = state.halls.filter(h => h.branchId === state.currentBranchId);
   const branchExpCats = state.expenseCategories.filter(c => c.branchId === state.currentBranchId);
 
-  const openAddTT = () => { setEditingTT(null); setTtForm({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '' }); setShowAddTraining(true); };
-  const openEditTT = (tt: TrainingType) => { setEditingTT(tt); setTtForm({ name: tt.name, duration: tt.duration, description: tt.description, color: tt.color, categoryId: tt.categoryId || '' }); setShowAddTraining(true); };
+  const openAddTT = () => { setEditingTT(null); setTtForm({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '', extraPrice: '', extraPriceName: '' }); setShowAddTraining(true); };
+  const openEditTT = (tt: TrainingType) => { setEditingTT(tt); setTtForm({ name: tt.name, duration: tt.duration, description: tt.description, color: tt.color, categoryId: tt.categoryId || '', extraPrice: tt.extraPrice ?? '', extraPriceName: tt.extraPriceName ?? '' }); setShowAddTraining(true); };
   const handleSaveTT = () => {
     if (!ttForm.name) return;
-    if (editingTT) updateTrainingType(editingTT.id, { name: ttForm.name, duration: ttForm.duration, description: ttForm.description, color: ttForm.color, categoryId: ttForm.categoryId || undefined });
-    else addTrainingType({ name: ttForm.name, duration: ttForm.duration, description: ttForm.description, trainerIds: [], branchIds: [state.currentBranchId], color: ttForm.color, categoryId: ttForm.categoryId || undefined });
+    const extraPrice = ttForm.extraPrice !== '' ? Number(ttForm.extraPrice) : null;
+    const data = { name: ttForm.name, duration: ttForm.duration, description: ttForm.description, color: ttForm.color, categoryId: ttForm.categoryId || undefined, extraPrice, extraPriceName: ttForm.extraPriceName || null };
+    if (editingTT) updateTrainingType(editingTT.id, data);
+    else addTrainingType({ ...data, trainerIds: [], branchIds: [state.currentBranchId] });
     setShowAddTraining(false);
   };
 
@@ -566,13 +568,22 @@ export default function Settings({ store }: SettingsProps) {
     setShowAddTC(false);
   };
 
-  const openAddTrainer = () => { setEditingTrainer(null); setTrainerForm({ name: '', specialty: '', branchId: state.currentBranchId }); setShowAddTrainer(true); };
-  const openEditTrainer = (t: Trainer) => { setEditingTrainer(t); setTrainerForm({ name: t.name, specialty: t.specialty, branchId: t.branchId }); setShowAddTrainer(true); };
+  const openAddTrainer = () => { setEditingTrainer(null); setTrainerForm({ name: '', specialty: '', branchId: state.currentBranchId, branchIds: [state.currentBranchId] }); setShowAddTrainer(true); };
+  const openEditTrainer = (t: Trainer) => { setEditingTrainer(t); setTrainerForm({ name: t.name, specialty: t.specialty, branchId: t.branchId, branchIds: t.branchIds ?? [t.branchId] }); setShowAddTrainer(true); };
   const handleSaveTrainer = () => {
     if (!trainerForm.name) return;
-    if (editingTrainer) updateTrainer(editingTrainer.id, trainerForm);
-    else addTrainer(trainerForm);
+    if (editingTrainer) updateTrainer(editingTrainer.id, { ...trainerForm, branchIds: trainerForm.branchIds });
+    else addTrainer({ ...trainerForm, branchIds: trainerForm.branchIds });
     setShowAddTrainer(false);
+  };
+
+  const toggleTrainerBranch = (branchId: string) => {
+    setTrainerForm(f => ({
+      ...f,
+      branchIds: f.branchIds.includes(branchId)
+        ? f.branchIds.filter(id => id !== branchId)
+        : [...f.branchIds, branchId],
+    }));
   };
 
   const openAddHall = () => { setEditingHall(null); setHallForm({ name: '', capacity: 20 }); setShowAddHall(true); };
@@ -593,8 +604,7 @@ export default function Settings({ store }: SettingsProps) {
     if (editingPlan) {
       updateSubscriptionPlan(editingPlan.id, { ...baseData, branchId: editingPlan.branchId });
     } else {
-      // Дублируем на все филиалы
-      state.branches.forEach(branch => addSubscriptionPlan({ ...baseData, branchId: branch.id }));
+      addSubscriptionPlan({ ...baseData, branchId: state.currentBranchId });
     }
     setShowAddPlan(false);
   };
@@ -608,7 +618,7 @@ export default function Settings({ store }: SettingsProps) {
     if (editingSingle) {
       updateSingleVisitPlan(editingSingle.id, { ...baseData, branchId: editingSingle.branchId });
     } else {
-      state.branches.forEach(branch => addSingleVisitPlan({ ...baseData, branchId: branch.id }));
+      addSingleVisitPlan({ ...baseData, branchId: state.currentBranchId });
     }
     setShowAddSingle(false);
   };
@@ -706,13 +716,13 @@ export default function Settings({ store }: SettingsProps) {
           </div>
           <div className="bg-white border border-border rounded-xl overflow-hidden">
             <table className="w-full data-table">
-              <thead><tr><th>Имя</th><th>Специализация</th><th>Филиал</th><th></th></tr></thead>
+              <thead><tr><th>Имя</th><th>Специализация</th><th>Филиалы</th><th></th></tr></thead>
               <tbody>
-                {state.trainers.map(t => (
+                {state.trainers.filter(t => (t.branchIds ?? [t.branchId]).includes(state.currentBranchId)).map(t => (
                   <tr key={t.id}>
                     <td className="font-medium">{t.name}</td>
                     <td className="text-muted-foreground">{t.specialty}</td>
-                    <td className="text-muted-foreground">{state.branches.find(b => b.id === t.branchId)?.name}</td>
+                    <td className="text-muted-foreground text-xs">{(t.branchIds ?? [t.branchId]).map(id => state.branches.find(b => b.id === id)?.name).filter(Boolean).join(', ')}</td>
                     <td>
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => openEditTrainer(t)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Icon name="Pencil" size={13} /></button>
@@ -952,6 +962,20 @@ export default function Settings({ store }: SettingsProps) {
             <div><Label className="text-xs text-muted-foreground mb-1 block">Длительность (мин)</Label><Input type="number" value={ttForm.duration} onChange={e => setTtForm(f => ({ ...f, duration: Number(e.target.value) }))} /></div>
             <div><Label className="text-xs text-muted-foreground mb-1 block">Описание</Label><Textarea value={ttForm.description} onChange={e => setTtForm(f => ({ ...f, description: e.target.value }))} rows={2} /></div>
             <div><Label className="text-xs text-muted-foreground mb-1 block">Цвет (если нет категории)</Label><ColorPicker value={ttForm.color} onChange={c => setTtForm(f => ({ ...f, color: c }))} /></div>
+            <div className="border border-border rounded-xl p-3 space-y-2 bg-secondary/30">
+              <Label className="text-xs font-medium block">Доплата (необязательно)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Сумма ₽</Label>
+                  <Input type="number" min={0} placeholder="0 — без доплаты" value={ttForm.extraPrice} onChange={e => setTtForm(f => ({ ...f, extraPrice: e.target.value }))} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Название доплаты</Label>
+                  <Input placeholder="Аренда зала..." value={ttForm.extraPriceName} onChange={e => setTtForm(f => ({ ...f, extraPriceName: e.target.value }))} className="h-8 text-sm" />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Если указана — при отметке «Пришёл» потребуется дополнительная оплата</p>
+            </div>
             <Button onClick={handleSaveTT} disabled={!ttForm.name} className="w-full bg-foreground text-primary-foreground">{editingTT ? 'Сохранить' : 'Добавить'}</Button>
           </div>
         </DialogContent>
@@ -975,10 +999,22 @@ export default function Settings({ store }: SettingsProps) {
             <div><Label className="text-xs text-muted-foreground mb-1 block">ФИО *</Label><Input value={trainerForm.name} onChange={e => setTrainerForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label className="text-xs text-muted-foreground mb-1 block">Специализация</Label><Input value={trainerForm.specialty} onChange={e => setTrainerForm(f => ({ ...f, specialty: e.target.value }))} /></div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Филиал</Label>
-              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={trainerForm.branchId} onChange={e => setTrainerForm(f => ({ ...f, branchId: e.target.value }))}>
-                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              <Label className="text-xs text-muted-foreground mb-1 block">Основной филиал</Label>
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={trainerForm.branchId} onChange={e => setTrainerForm(f => ({ ...f, branchId: e.target.value, branchIds: [...new Set([...f.branchIds, e.target.value])] }))}>
+                {(currentStaff?.role === 'director' ? state.branches : state.branches.filter(b => currentStaff?.branchIds?.includes(b.id))).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Доступен в филиалах</Label>
+              <div className="flex flex-wrap gap-2">
+                {(currentStaff?.role === 'director' ? state.branches : state.branches.filter(b => currentStaff?.branchIds?.includes(b.id))).map(b => (
+                  <button key={b.id} type="button"
+                    onClick={() => toggleTrainerBranch(b.id)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${trainerForm.branchIds.includes(b.id) ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
+                    {b.name}
+                  </button>
+                ))}
+              </div>
             </div>
             <Button onClick={handleSaveTrainer} disabled={!trainerForm.name} className="w-full bg-foreground text-primary-foreground">{editingTrainer ? 'Сохранить' : 'Добавить'}</Button>
           </div>
@@ -999,11 +1035,7 @@ export default function Settings({ store }: SettingsProps) {
       <Dialog open={showAddPlan} onOpenChange={setShowAddPlan}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editingPlan ? 'Редактировать абонемент' : 'Новый абонемент'}</DialogTitle></DialogHeader>
-          {!editingPlan && state.branches.length > 1 && (
-            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 -mt-1 mb-1">
-              Абонемент будет создан для всех {state.branches.length} филиалов
-            </div>
-          )}
+
           <div className="space-y-4">
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
