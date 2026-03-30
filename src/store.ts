@@ -237,6 +237,14 @@ export interface CashOperation {
   staffId: string;
 }
 
+export interface Shift {
+  id: string;
+  branchId: string;
+  staffId: string;
+  openedAt: string;
+  closedAt?: string;
+}
+
 export interface Permission {
   // Аналитика и отчёты
   viewDirectorDashboard: boolean;      // Дашборд директора/управляющего
@@ -509,6 +517,7 @@ export interface AppState {
   importedCvetnoiV3?: boolean;
   projectCode: string;
   cashOperations: CashOperation[];
+  shifts: Shift[];
 }
 
 const defaultStaff: StaffMember[] = [
@@ -561,6 +570,7 @@ const initialState: AppState = {
   notificationCategories: DEFAULT_NOTIFICATION_CATEGORIES,
   projectCode: 'FIT-7842',
   cashOperations: [],
+  shifts: [],
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -2117,6 +2127,20 @@ export function useStore() {
 
   const findClientByPhone = (phone: string) => state.clients.find(c => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''));
 
+  const openShift = (staffId: string, branchId: string) => {
+    const shift: Shift = { id: genId(), branchId, staffId, openedAt: new Date().toISOString() };
+    update(s => ({ ...s, shifts: [...(s.shifts || []), shift] }));
+    return shift;
+  };
+
+  const closeShift = (shiftId: string) => {
+    update(s => ({ ...s, shifts: (s.shifts || []).map(sh => sh.id === shiftId ? { ...sh, closedAt: new Date().toISOString() } : sh) }));
+  };
+
+  const getActiveShift = (staffId: string, branchId: string) => {
+    return (state.shifts || []).find(sh => sh.staffId === staffId && sh.branchId === branchId && !sh.closedAt) || null;
+  };
+
   return {
     state,
     dbLoaded,
@@ -2143,6 +2167,7 @@ export function useStore() {
     dismissNotification, restoreNotification, failNotification,
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
     addCashOperation, deleteCashOperation, updateProjectCode,
+    openShift, closeShift, getActiveShift,
   };
 }
 

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
-import { StoreType, ROLE_LABELS, Permission } from '@/store';
+import { StoreType, ROLE_LABELS, Permission, Shift } from '@/store';
+import ShiftReport from '@/components/ShiftReport';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -72,10 +73,36 @@ function countNotifications(store: StoreType): number {
 }
 
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
-  const { state, setCurrentBranch } = store;
+  const { state, setCurrentBranch, openShift, closeShift, getActiveShift } = store;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [closedShift, setClosedShift] = useState<Shift | null>(null);
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
   const perms = currentStaff?.permissions;
+  const isAdmin = currentStaff?.role === 'admin';
+
+  const activeShift = currentStaff ? getActiveShift(currentStaff.id, state.currentBranchId) : null;
+
+  // При входе администратора — автоматически открываем смену
+  useEffect(() => {
+    if (!isAdmin || !currentStaff) return;
+    const existing = getActiveShift(currentStaff.id, state.currentBranchId);
+    if (!existing) {
+      openShift(currentStaff.id, state.currentBranchId);
+    }
+  }, [currentStaff?.id, state.currentBranchId]);
+
+  const handleCloseShift = () => {
+    if (!activeShift) return;
+    closeShift(activeShift.id);
+    const closed = { ...activeShift, closedAt: new Date().toISOString() };
+    setClosedShift(closed);
+    // Не разлогиниваем сразу — показываем отчёт смены
+  };
+
+  const handleOpenNewShift = () => {
+    setClosedShift(null);
+    if (onLogout) onLogout();
+  };
 
   // Только филиалы к которым у сотрудника есть доступ
   const allowedBranches = currentStaff?.branchIds?.length
@@ -172,7 +199,16 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
             <div className="truncate">{ROLE_LABELS[currentStaff?.role ?? 'admin']}</div>
           </div>
         </div>
-        {onLogout && (
+        {isAdmin && activeShift && (
+          <button
+            onClick={() => { handleCloseShift(); setSidebarOpen(false); }}
+            className="w-full flex items-center gap-2 text-xs text-orange-600 hover:text-orange-700 px-2 py-1.5 rounded-md hover:bg-orange-50 transition-colors"
+          >
+            <Icon name="DoorOpen" size={13} />
+            Закрыть смену
+          </button>
+        )}
+        {onLogout && !isAdmin && (
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-secondary transition-colors"
@@ -186,6 +222,7 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
   );
 
   return (
+    <>
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-56 bg-white border-r border-border flex-col shrink-0">
@@ -241,7 +278,16 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
               <span className="text-xs font-medium text-foreground">{currentStaff?.name ?? '—'}</span>
               <span className="text-xs text-muted-foreground">· {ROLE_LABELS[currentStaff?.role ?? 'admin']}</span>
             </div>
-            {onLogout && (
+            {isAdmin && activeShift && (
+              <button
+                onClick={handleCloseShift}
+                className="hidden md:flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 px-2 py-1 rounded-md hover:bg-orange-50 transition-colors"
+              >
+                <Icon name="DoorOpen" size={13} />
+                Закрыть смену
+              </button>
+            )}
+            {onLogout && !isAdmin && (
               <button
                 onClick={onLogout}
                 className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-secondary transition-colors"
@@ -290,5 +336,15 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
         </nav>
       </main>
     </div>
+
+    {closedShift && (
+      <ShiftReport
+        open={true}
+        store={store}
+        shift={closedShift}
+        onOpenShift={handleOpenNewShift}
+      />
+    )}
+    </>
   );
 }
