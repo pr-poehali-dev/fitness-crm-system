@@ -48,8 +48,8 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
   const selectedClient = state.clients.find(c => c.id === selectedClientId);
   const clientBonusBalance = selectedClientId ? getClientBonusBalance(selectedClientId, state.currentBranchId) : 0;
 
-  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
-  const branchSinglePlans = state.singleVisitPlans.filter(p => p.branchId === state.currentBranchId);
+  const branchPlans = state.subscriptionPlans;
+  const branchSinglePlans = state.singleVisitPlans;
   const items = selectedType === 'subscription' ? branchPlans : branchSinglePlans;
   const selectedItem = items.find(i => i.id === selectedItemId);
   const price = selectedItem?.price || 0;

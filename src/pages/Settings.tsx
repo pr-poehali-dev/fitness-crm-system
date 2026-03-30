@@ -919,9 +919,9 @@ export default function Settings({ store }: SettingsProps) {
     const autoActivateDays = planForm.autoActivateDays !== '' && planForm.autoActivateDays !== null ? Number(planForm.autoActivateDays) : null;
     const baseData = { name: planForm.name, price: planForm.price, durationDays: planForm.durationDays, sessionsLimit: planForm.sessionsLimit, trainingTypeIds: planForm.allDirections ? [] : planForm.trainingTypeIds, allDirections: planForm.allDirections, freezeDays: planForm.freezeDays, autoActivateDays };
     if (editingPlan) {
-      updateSubscriptionPlan(editingPlan.id, { ...baseData, branchId: editingPlan.branchId });
+      updateSubscriptionPlan(editingPlan.id, baseData);
     } else {
-      addSubscriptionPlan({ ...baseData, branchId: state.currentBranchId });
+      addSubscriptionPlan(baseData);
     }
     setShowAddPlan(false);
   };
@@ -933,9 +933,9 @@ export default function Settings({ store }: SettingsProps) {
     const autoActivateDays = singleForm.autoActivateDays !== '' && singleForm.autoActivateDays !== null ? Number(singleForm.autoActivateDays) : null;
     const baseData = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, autoActivateDays, noExtraCharge: singleForm.noExtraCharge };
     if (editingSingle) {
-      updateSingleVisitPlan(editingSingle.id, { ...baseData, branchId: editingSingle.branchId });
+      updateSingleVisitPlan(editingSingle.id, baseData);
     } else {
-      addSingleVisitPlan({ ...baseData, branchId: state.currentBranchId });
+      addSingleVisitPlan(baseData);
     }
     setShowAddSingle(false);
   };
@@ -1102,7 +1102,6 @@ export default function Settings({ store }: SettingsProps) {
                     <div className="text-xl font-bold mt-1">{p.price.toLocaleString()} ₽</div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs badge-other px-2 py-1 rounded-full">{state.branches.find(b => b.id === p.branchId)?.name}</span>
                     <button onClick={() => openEditPlan(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Icon name="Pencil" size={13} /></button>
                     <button onClick={() => removeSubscriptionPlan(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"><Icon name="Trash2" size={13} /></button>
                   </div>
@@ -1142,7 +1141,6 @@ export default function Settings({ store }: SettingsProps) {
                   <div>
                     <div className="font-medium">{p.name}</div>
                     <div className="text-xl font-bold mt-1">{p.price.toLocaleString()} ₽</div>
-                    <div className="text-xs text-muted-foreground mt-1">{state.branches.find(b => b.id === p.branchId)?.name}</div>
                     {p.noExtraCharge && (
                       <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Без доплат</span>
                     )}

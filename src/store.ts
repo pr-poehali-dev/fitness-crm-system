@@ -53,9 +53,7 @@ export interface SubscriptionPlan {
   trainingTypeIds: string[];
   allDirections: boolean;
   freezeDays: number;
-  branchId: string;
-  // Срок автоактивации: кол-во дней с момента покупки, после которых абонемент активируется автоматически
-  // Если null — активируется при покупке сразу
+  branchId?: string;
   autoActivateDays: number | null;
 }
 
@@ -64,10 +62,8 @@ export interface SingleVisitPlan {
   name: string;
   price: number;
   trainingTypeIds: string[];
-  branchId: string;
-  // Срок автоактивации разового (дни с покупки до автоактивации), null — сразу
+  branchId?: string;
   autoActivateDays: number | null;
-  // Если true — при записи по этому посещению доплата за тренировку не требуется
   noExtraCharge?: boolean;
 }
 
