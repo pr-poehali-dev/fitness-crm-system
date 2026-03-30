@@ -82,9 +82,13 @@ export default function Login({ store, onLogin }: LoginProps) {
                 Продолжить
               </Button>
 
-              <p className="text-xs text-center text-muted-foreground pt-1">
-                Код проекта выдаёт руководитель
-              </p>
+              <div className="bg-secondary/60 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Код этого проекта</p>
+                  <p className="text-sm font-semibold tracking-widest">{state.projectCode}</p>
+                </div>
+                <Icon name="KeyRound" size={16} className="text-muted-foreground shrink-0" />
+              </div>
             </>
           ) : (
             <>
