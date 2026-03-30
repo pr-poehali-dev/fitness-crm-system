@@ -59,16 +59,14 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (!store.dbLoaded) return; // Ждём загрузки из БД, чтобы не сбросить авторизацию раньше времени
     const savedStaffId = loadAuth();
-    if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
+    if (!savedStaffId) return;
+    if (store.state.staff.find(s => s.id === savedStaffId)) {
       store.setCurrentStaff(savedStaffId);
       setIsAuthenticated(true);
-    } else if (savedStaffId) {
-      clearAuth();
-      setIsAuthenticated(false);
     }
-  }, [store.dbLoaded, store.state.staff.length]);
+    // Не сбрасываем авторизацию — staff может ещё не загрузиться из БД
+  }, [store.state.staff.length]);
 
   // Автоматически активировать pending абонементы при загрузке
   useEffect(() => {
@@ -96,26 +94,6 @@ export default function App() {
     setSellClientId(clientId);
     setShowSell(true);
   };
-
-  if (!store.dbLoaded) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <svg className="animate-spin h-7 w-7" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-          <span className="text-sm">Загрузка...</span>
-          <button
-            onClick={() => { localStorage.clear(); window.location.reload(); }}
-            className="mt-4 text-xs text-muted-foreground underline"
-          >
-            Не загружается? Нажми сюда
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (!isAuthenticated) {
     return <Login store={store} onLogin={handleLogin} />;

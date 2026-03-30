@@ -11,7 +11,7 @@ interface LoginProps {
 }
 
 export default function Login({ store, onLogin }: LoginProps) {
-  const { state } = store;
+  const { state, dbLoaded } = store;
   const [step, setStep] = useState<'code' | 'credentials'>('code');
   const [projectCode, setProjectCode] = useState('');
   const [login, setLogin] = useState('');
@@ -30,6 +30,7 @@ export default function Login({ store, onLogin }: LoginProps) {
   };
 
   const handleLoginSubmit = () => {
+    if (!dbLoaded) { setError('Подождите, данные ещё загружаются...'); return; }
     if (!login || !password) { setError('Введите логин и пароль'); return; }
     const member = state.staff.find(m => {
       const loginMatch = m.login ? m.login === login : m.email === login;
@@ -143,7 +144,7 @@ export default function Login({ store, onLogin }: LoginProps) {
                 disabled={!login || !password}
                 className="w-full bg-foreground text-primary-foreground hover:opacity-90"
               >
-                Войти
+                {!dbLoaded ? 'Загрузка данных...' : 'Войти'}
               </Button>
 
               <p className="text-xs text-center text-muted-foreground pt-1">
