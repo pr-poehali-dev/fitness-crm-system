@@ -26,6 +26,8 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
+  const [showReturn, setShowReturn] = useState(false);
+  const [returnPayMethod, setReturnPayMethod] = useState<'cash' | 'card'>('cash');
   const [freezeDays, setFreezeDays] = useState(7);
   const [extendDays, setExtendDays] = useState(0);
   const [extendSessions, setExtendSessions] = useState(0);
@@ -213,7 +215,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                   ⏱ Изменить срок
                 </button>
                 <button
-                  onClick={() => { if (confirm('Сделать возврат?')) returnSubscription(sub.id); }}
+                  onClick={() => { setReturnPayMethod('cash'); setShowReturn(true); }}
                   className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
                 >
                   ↩ Возврат
@@ -374,6 +376,51 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               Сохранить
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return modal */}
+      <Dialog open={showReturn} onOpenChange={setShowReturn}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-red-600"><span>↩</span> Возврат абонемента</DialogTitle></DialogHeader>
+          {(() => {
+            const sub = state.subscriptions.find(s => s.id === client.activeSubscriptionId);
+            if (!sub) return null;
+            return (
+              <div className="space-y-4">
+                <div className="bg-secondary/50 rounded-lg px-4 py-3 text-sm">
+                  <div className="font-medium">{sub.planName}</div>
+                  <div className="text-muted-foreground">Сумма возврата: <span className="font-semibold text-foreground">{sub.price.toLocaleString('ru-RU')} ₽</span></div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Способ возврата</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['cash', 'card'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setReturnPayMethod(m)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${returnPayMethod === m ? 'border-red-400 bg-red-50 text-red-700' : 'border-border hover:bg-secondary'}`}
+                      >
+                        <Icon name={m === 'cash' ? 'Banknote' : 'CreditCard'} size={15} />
+                        {m === 'cash' ? 'Наличными' : 'Безналичными'}
+                      </button>
+                    ))}
+                  </div>
+                  {returnPayMethod === 'cash' && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                      Сумма будет учтена как инкассация из кассы
+                    </p>
+                  )}
+                </div>
+                <Button
+                  onClick={() => { returnSubscription(sub.id, returnPayMethod, state.currentStaffId); setShowReturn(false); }}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white"
+                >
+                  Подтвердить возврат {sub.price.toLocaleString('ru-RU')} ₽
+                </Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

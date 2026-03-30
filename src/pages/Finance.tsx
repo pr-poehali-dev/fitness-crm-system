@@ -44,12 +44,13 @@ export default function Finance({ store }: FinanceProps) {
     ...branchSales.map(s => ({
       id: s.id,
       date: s.date,
-      type: s.type === 'subscription' ? 'Абонемент' : 'Разовое',
+      type: s.isReturn ? 'Возврат' : s.type === 'subscription' ? 'Абонемент' : 'Разовое',
       client: state.clients.find(c => c.id === s.clientId),
       item: s.itemName,
       amount: s.finalPrice,
       method: s.paymentMethod,
-      isIncome: true,
+      isIncome: !s.isReturn,
+      isReturn: s.isReturn,
     })),
     ...branchVisits.filter(v => v.isSingleVisit && v.status === 'attended').map(v => {
       const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
@@ -63,6 +64,7 @@ export default function Finance({ store }: FinanceProps) {
         amount: v.price,
         method: 'cash' as const,
         isIncome: true,
+        isReturn: false,
       };
     }),
   ].sort((a, b) => b.date.localeCompare(a.date));
@@ -215,12 +217,14 @@ export default function Finance({ store }: FinanceProps) {
                     </td>
                     <td className="text-sm text-muted-foreground">{t.item}</td>
                     <td>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.type === 'Абонемент' ? 'badge-loyal' : 'badge-other'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.isReturn ? 'bg-red-100 text-red-700' : t.type === 'Абонемент' ? 'badge-loyal' : 'badge-other'}`}>
                         {t.type}
                       </span>
                     </td>
                     <td className="text-sm">{t.method === 'cash' ? 'Нал' : 'Безнал'}</td>
-                    <td className="font-semibold text-green-600">+{t.amount.toLocaleString()} ₽</td>
+                    <td className={`font-semibold ${t.isReturn ? 'text-red-600' : 'text-green-600'}`}>
+                      {t.isReturn ? '' : '+'}{Math.abs(t.amount).toLocaleString()} ₽
+                    </td>
                   </tr>
                 ))}
               </tbody>

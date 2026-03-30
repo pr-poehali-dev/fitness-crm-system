@@ -16,7 +16,6 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString('ru-RU', { day: '2
 export default function Cash({ store }: CashProps) {
   const { state, addCashOperation, deleteCashOperation } = store;
   const branchId = state.currentBranchId;
-  const today = new Date().toISOString().split('T')[0];
 
   const [showModal, setShowModal] = useState(false);
   const [opType, setOpType] = useState<'deposit' | 'collection'>('deposit');
@@ -24,9 +23,12 @@ export default function Cash({ store }: CashProps) {
   const [comment, setComment] = useState('');
   const [filterDate, setFilterDate] = useState('');
 
-  // Продажи наличными по филиалу
-  const cashSales = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash');
+  // Продажи наличными (без возвратов) и возвраты наличными
+  const cashSales = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && !s.isReturn);
   const cashSalesTotal = cashSales.reduce((sum, s) => sum + s.finalPrice, 0);
+
+  const cashReturns = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && s.isReturn);
+  const cashReturnsTotal = cashReturns.reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
   // Расходы наличными по филиалу
   const cashExpenses = state.expenses.filter(e => e.branchId === branchId && e.paymentMethod === 'cash');
@@ -35,10 +37,13 @@ export default function Cash({ store }: CashProps) {
   // Кассовые операции по филиалу
   const cashOps = state.cashOperations.filter(o => o.branchId === branchId);
   const depositsTotal = cashOps.filter(o => o.type === 'deposit').reduce((sum, o) => sum + o.amount, 0);
-  const collectionsTotal = cashOps.filter(o => o.type === 'collection').reduce((sum, o) => sum + o.amount, 0);
+  // Инкассации из операций (не считаем возвраты абонементов — они уже через Sale)
+  const manualCollectionsTotal = cashOps
+    .filter(o => o.type === 'collection' && !o.comment.startsWith('Возврат абонемента:'))
+    .reduce((sum, o) => sum + o.amount, 0);
 
-  // Баланс кассы: продажи + внесения - расходы - инкассации
-  const balance = cashSalesTotal + depositsTotal - cashExpensesTotal - collectionsTotal;
+  // Баланс: продажи нал + внесения - расходы нал - возвраты нал - инкассации (ручные)
+  const balance = cashSalesTotal + depositsTotal - cashExpensesTotal - cashReturnsTotal - manualCollectionsTotal;
 
   const openModal = (type: 'deposit' | 'collection') => {
     setOpType(type);
@@ -50,23 +55,32 @@ export default function Cash({ store }: CashProps) {
   const handleSubmit = () => {
     const n = parseFloat(amount);
     if (!n || n <= 0) return;
+    if (opType === 'collection' && !comment.trim()) return;
     addCashOperation({
       branchId,
       type: opType,
       amount: n,
-      comment,
+      comment: comment.trim(),
       date: new Date().toISOString(),
       staffId: state.currentStaffId,
     });
     setShowModal(false);
   };
 
-  // История: объединяем все события, фильтруем по дате
+  const getStaffName = (staffId: string) => {
+    const s = state.staff.find(m => m.id === staffId);
+    if (!s) return '—';
+    const parts = s.name.trim().split(' ');
+    return parts.length >= 2 ? `${parts[0]} ${parts[1][0]}.` : s.name;
+  };
+
+  // История: объединяем все события
   type HistoryItem =
-    | { kind: 'sale'; id: string; date: string; amount: number; label: string }
-    | { kind: 'expense'; id: string; date: string; amount: number; label: string }
-    | { kind: 'deposit'; id: string; date: string; amount: number; comment: string }
-    | { kind: 'collection'; id: string; date: string; amount: number; comment: string };
+    | { kind: 'sale'; id: string; date: string; amount: number; label: string; staffId?: string }
+    | { kind: 'return'; id: string; date: string; amount: number; label: string; staffId?: string }
+    | { kind: 'expense'; id: string; date: string; amount: number; label: string; staffId?: string }
+    | { kind: 'deposit'; id: string; date: string; amount: number; comment: string; staffId: string }
+    | { kind: 'collection'; id: string; date: string; amount: number; comment: string; staffId: string };
 
   const history: HistoryItem[] = [
     ...cashSales.map(s => ({
@@ -74,6 +88,13 @@ export default function Cash({ store }: CashProps) {
       id: s.id,
       date: s.date + 'T00:00:00',
       amount: s.finalPrice,
+      label: s.itemName,
+    })),
+    ...cashReturns.map(s => ({
+      kind: 'return' as const,
+      id: s.id,
+      date: s.date + 'T00:00:00',
+      amount: Math.abs(s.finalPrice),
       label: s.itemName,
     })),
     ...cashExpenses.map(e => {
@@ -86,13 +107,16 @@ export default function Cash({ store }: CashProps) {
         label: cat?.name || 'Расход',
       };
     }),
-    ...cashOps.map(o => ({
-      kind: o.type as 'deposit' | 'collection',
-      id: o.id,
-      date: o.date,
-      amount: o.amount,
-      comment: o.comment,
-    })),
+    ...cashOps
+      .filter(o => !o.comment.startsWith('Возврат абонемента:'))
+      .map(o => ({
+        kind: o.type as 'deposit' | 'collection',
+        id: o.id,
+        date: o.date,
+        amount: o.amount,
+        comment: o.comment,
+        staffId: o.staffId,
+      })),
   ]
     .filter(item => !filterDate || item.date.startsWith(filterDate))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -106,7 +130,7 @@ export default function Cash({ store }: CashProps) {
       <div className={`rounded-2xl p-6 text-white ${balance >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
         <div className="text-sm font-medium opacity-80 mb-1">Остаток в кассе</div>
         <div className="text-4xl font-bold tracking-tight">{fmt(balance)}</div>
-        <div className="flex gap-5 mt-4 text-sm opacity-90">
+        <div className="flex flex-wrap gap-5 mt-4 text-sm opacity-90">
           <div>
             <div className="opacity-70 text-xs">Продажи нал.</div>
             <div className="font-medium">+{fmt(cashSalesTotal)}</div>
@@ -119,9 +143,15 @@ export default function Cash({ store }: CashProps) {
             <div className="opacity-70 text-xs">Расходы нал.</div>
             <div className="font-medium">−{fmt(cashExpensesTotal)}</div>
           </div>
+          {cashReturnsTotal > 0 && (
+            <div>
+              <div className="opacity-70 text-xs">Возвраты нал.</div>
+              <div className="font-medium">−{fmt(cashReturnsTotal)}</div>
+            </div>
+          )}
           <div>
             <div className="opacity-70 text-xs">Инкассации</div>
-            <div className="font-medium">−{fmt(collectionsTotal)}</div>
+            <div className="font-medium">−{fmt(manualCollectionsTotal)}</div>
           </div>
         </div>
       </div>
@@ -171,21 +201,21 @@ export default function Cash({ store }: CashProps) {
           <div className="divide-y divide-border/40">
             {history.map(item => {
               const isSale = item.kind === 'sale';
+              const isReturn = item.kind === 'return';
               const isExpense = item.kind === 'expense';
               const isDeposit = item.kind === 'deposit';
               const isCollection = item.kind === 'collection';
 
-              const icon = isSale ? 'ShoppingBag' : isExpense ? 'TrendingDown' : isDeposit ? 'ArrowDownLeft' : 'ArrowUpRight';
-              const iconColor = isSale ? 'text-emerald-600' : isExpense ? 'text-red-500' : isDeposit ? 'text-emerald-600' : 'text-blue-600';
+              const icon = isSale ? 'ShoppingBag' : isReturn ? 'RotateCcw' : isExpense ? 'TrendingDown' : isDeposit ? 'ArrowDownLeft' : 'ArrowUpRight';
+              const iconColor = isSale ? 'text-emerald-600' : isReturn ? 'text-red-500' : isExpense ? 'text-red-500' : isDeposit ? 'text-emerald-600' : 'text-blue-600';
               const sign = isSale || isDeposit ? '+' : '−';
               const amtColor = isSale || isDeposit ? 'text-emerald-600' : 'text-red-500';
-              const label = isSale
-                ? (item as { label: string }).label
-                : isExpense
+              const label = (isSale || isReturn || isExpense)
                 ? (item as { label: string }).label
                 : (item as { comment: string }).comment || (isDeposit ? 'Внесение' : 'Инкассация');
-              const badge = isSale ? 'Продажа' : isExpense ? 'Расход' : isDeposit ? 'Внесение' : 'Инкассация';
-              const badgeColor = isSale ? 'bg-emerald-50 text-emerald-700' : isExpense ? 'bg-red-50 text-red-700' : isDeposit ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700';
+              const badge = isSale ? 'Продажа' : isReturn ? 'Возврат' : isExpense ? 'Расход' : isDeposit ? 'Внесение' : 'Инкассация';
+              const badgeColor = isSale ? 'bg-emerald-50 text-emerald-700' : isReturn ? 'bg-red-50 text-red-700' : isExpense ? 'bg-red-50 text-red-700' : isDeposit ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700';
+              const staffId = (item as { staffId?: string }).staffId;
 
               return (
                 <div key={item.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 transition-colors">
@@ -193,13 +223,21 @@ export default function Cash({ store }: CashProps) {
                     <Icon name={icon} size={14} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium truncate">{label || badge}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${badgeColor}`}>{badge}</span>
                     </div>
-                    <div className="text-xs text-muted-foreground">{fmtDate(item.date)}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span>{fmtDate(item.date)}</span>
+                      {staffId && (
+                        <span className="flex items-center gap-0.5">
+                          <Icon name="User" size={10} />
+                          {getStaffName(staffId)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className={`font-semibold text-sm tabular-nums ${amtColor}`}>
+                  <div className={`font-semibold text-sm tabular-nums shrink-0 ${amtColor}`}>
                     {sign}{fmt(item.amount)}
                   </div>
                   {(isDeposit || isCollection) && canDelete && (
@@ -239,16 +277,21 @@ export default function Cash({ store }: CashProps) {
               />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">Комментарий</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">
+                Причина / комментарий {opType === 'collection' && <span className="text-red-500">*</span>}
+              </Label>
               <Input
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                placeholder={opType === 'deposit' ? 'Размен, начало смены...' : 'Инкассация за день...'}
+                placeholder={opType === 'deposit' ? 'Размен, начало смены...' : 'Укажите причину инкассации'}
               />
+              {opType === 'collection' && !comment.trim() && amount && (
+                <p className="text-xs text-red-500 mt-1">Укажите причину инкассации</p>
+              )}
             </div>
             <Button
               onClick={handleSubmit}
-              disabled={!amount || parseFloat(amount) <= 0}
+              disabled={!amount || parseFloat(amount) <= 0 || (opType === 'collection' && !comment.trim())}
               className={`w-full text-white ${opType === 'deposit' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-500 hover:bg-blue-600'}`}
             >
               {opType === 'deposit' ? 'Внести' : 'Инкассировать'}

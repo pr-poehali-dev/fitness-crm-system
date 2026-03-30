@@ -99,6 +99,8 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
     inPeriod(e.date) && (branchFilter === 'all' || e.branchId === branchFilter)
   );
   const totalExpenses = branchExpenses.reduce((s, e) => s + e.amount, 0);
+  // Возвраты — для отображения в финансовом блоке
+  const totalReturns = branchSales.filter(s => s.isReturn).reduce((s, x) => s + Math.abs(x.finalPrice), 0);
   const profit = totalRevenue - totalExpenses;
   const margin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0;
   const totalDiscounts = branchSales.reduce((s, x) => s + (x.price - x.finalPrice), 0);
@@ -190,6 +192,7 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
             { label: 'Абонементы', value: subRevenue, color: 'text-blue-600', bold: false },
             { label: 'Доп. продажи', value: singleRevenue, color: 'text-violet-600', bold: false },
             { label: 'Расходы', value: -totalExpenses, color: 'text-red-500', bold: false },
+            ...(totalReturns > 0 ? [{ label: 'Возвраты абонементов', value: -totalReturns, color: 'text-orange-600', bold: false }] : []),
             { label: 'Прибыль', value: profit, color: profit >= 0 ? 'text-emerald-600' : 'text-red-500', bold: true },
             { label: 'Скидки (потери)', value: -totalDiscounts, color: 'text-orange-500', bold: false },
           ].map(item => (

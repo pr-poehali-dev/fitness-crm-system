@@ -1721,12 +1721,45 @@ export function useStore() {
     }));
   };
 
-  const returnSubscription = (subId: string) => {
-    update(s => ({
-      ...s,
-      subscriptions: s.subscriptions.map(sub => sub.id === subId ? { ...sub, status: 'returned' } : sub),
-      clients: s.clients.map(c => c.activeSubscriptionId === subId ? { ...c, activeSubscriptionId: null } : c)
-    }));
+  const returnSubscription = (subId: string, paymentMethod: 'cash' | 'card' = 'cash', staffId?: string) => {
+    update(s => {
+      const sub = s.subscriptions.find(sub => sub.id === subId);
+      if (!sub) return s;
+      const returnSale: Sale = {
+        id: genId(),
+        clientId: sub.clientId,
+        type: 'subscription',
+        itemId: sub.planId,
+        itemName: `Возврат: ${sub.planName}`,
+        price: -sub.price,
+        discount: 0,
+        finalPrice: -sub.price,
+        paymentMethod,
+        date: new Date().toISOString().split('T')[0],
+        branchId: sub.branchId,
+        isFirstSubscription: false,
+        isReturn: true,
+        isRenewal: false,
+      };
+      const cashOps = paymentMethod === 'cash'
+        ? [...s.cashOperations, {
+            id: genId(),
+            branchId: sub.branchId,
+            type: 'collection' as const,
+            amount: sub.price,
+            comment: `Возврат абонемента: ${sub.planName}`,
+            date: new Date().toISOString(),
+            staffId: staffId || s.currentStaffId,
+          }]
+        : s.cashOperations;
+      return {
+        ...s,
+        subscriptions: s.subscriptions.map(s2 => s2.id === subId ? { ...s2, status: 'returned' } : s2),
+        clients: s.clients.map(c => c.activeSubscriptionId === subId ? { ...c, activeSubscriptionId: null } : c),
+        sales: [...s.sales, returnSale],
+        cashOperations: cashOps,
+      };
+    });
   };
 
   const updateSubscription = (subId: string, data: Partial<Subscription>) => {
