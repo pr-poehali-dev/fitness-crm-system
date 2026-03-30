@@ -496,6 +496,7 @@ export interface AppState {
   importedCvetnoiV1?: boolean;
   importedCvetnoiV2?: boolean;
   importedCvetnoiV3?: boolean;
+  projectCode: string;
 }
 
 const defaultStaff: StaffMember[] = [
@@ -546,6 +547,7 @@ const initialState: AppState = {
   dismissedNotifications: [],
   failedNotifications: {},
   notificationCategories: DEFAULT_NOTIFICATION_CATEGORIES,
+  projectCode: 'FIT-7842',
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
