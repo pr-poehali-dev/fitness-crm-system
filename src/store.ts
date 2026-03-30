@@ -227,6 +227,16 @@ export interface ExpensePlan {
 
 export type StaffRole = 'director' | 'manager' | 'admin' | 'trainer' | 'marketer';
 
+export interface CashOperation {
+  id: string;
+  branchId: string;
+  type: 'deposit' | 'collection'; // внесение / инкассация
+  amount: number;
+  comment: string;
+  date: string;
+  staffId: string;
+}
+
 export interface Permission {
   // Аналитика и отчёты
   viewDirectorDashboard: boolean;      // Дашборд директора/управляющего
@@ -258,6 +268,7 @@ export interface Permission {
   menuSubscriptions: boolean;          // Абонементы
   menuSales: boolean;                  // Продажи
   menuFinance: boolean;                // Финансы
+  menuCash: boolean;                   // Касса
   menuBranches: boolean;               // Филиалы
   menuStaff: boolean;                  // Сотрудники
   menuSettings: boolean;               // Настройки
@@ -285,7 +296,7 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
   marketer: 'Маркетолог',
 };
 
-const ALL_MENU = { menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: true, menuBranches: true, menuStaff: true, menuSettings: true };
+const ALL_MENU = { menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: true, menuCash: true, menuBranches: true, menuStaff: true, menuSettings: true };
 
 export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
   director: {
@@ -310,7 +321,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuCash: true, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   trainer: {
     viewDirectorDashboard: false, viewAdminDashboard: false, viewFinanceHistory: false,
@@ -318,7 +329,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: false, menuReports: false, menuDashboard: false, menuClients: false, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: false, menuReports: false, menuDashboard: false, menuClients: false, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   marketer: {
     viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: false,
@@ -326,7 +337,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
 };
 
@@ -497,6 +508,7 @@ export interface AppState {
   importedCvetnoiV2?: boolean;
   importedCvetnoiV3?: boolean;
   projectCode: string;
+  cashOperations: CashOperation[];
 }
 
 const defaultStaff: StaffMember[] = [
@@ -548,6 +560,7 @@ const initialState: AppState = {
   failedNotifications: {},
   notificationCategories: DEFAULT_NOTIFICATION_CATEGORIES,
   projectCode: 'FIT-7842',
+  cashOperations: [],
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -1864,6 +1877,17 @@ export function useStore() {
     update(s => ({ ...s, adSources: s.adSources.filter(a => a !== val) }));
   };
 
+  // Cash operations
+  const addCashOperation = (op: Omit<CashOperation, 'id'>) => {
+    update(s => ({ ...s, cashOperations: [...s.cashOperations, { ...op, id: genId() }] }));
+  };
+  const deleteCashOperation = (id: string) => {
+    update(s => ({ ...s, cashOperations: s.cashOperations.filter(o => o.id !== id) }));
+  };
+  const updateProjectCode = (code: string) => {
+    update(s => ({ ...s, projectCode: code }));
+  };
+
   // Expenses
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     update(s => ({ ...s, expenses: [...s.expenses, { ...expense, id: genId() }] }));
@@ -2085,6 +2109,7 @@ export function useStore() {
     getClientCategory, getClientFullName, findClientByPhone,
     dismissNotification, restoreNotification, failNotification,
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
+    addCashOperation, deleteCashOperation, updateProjectCode,
   };
 }
 

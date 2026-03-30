@@ -12,7 +12,7 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications' | 'project';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -792,6 +792,7 @@ export default function Settings({ store }: SettingsProps) {
     addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
     setMonthlyPlan, setExpensePlan, setSalesPlan,
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
+    updateProjectCode,
   } = store;
 
   const [tab, setTab] = useState<Tab>('trainings');
@@ -828,6 +829,8 @@ export default function Settings({ store }: SettingsProps) {
   const [editChannel, setEditChannel] = useState<{ old: string; val: string } | null>(null);
   const [newSource, setNewSource] = useState('');
   const [editSource, setEditSource] = useState<{ old: string; val: string } | null>(null);
+  const [projectCodeInput, setProjectCodeInput] = useState(state.projectCode);
+  const [projectCodeSaved, setProjectCodeSaved] = useState(false);
 
   const [showAddExpCat, setShowAddExpCat] = useState(false);
   const [editingExpCat, setEditingExpCat] = useState<ExpenseCategory | null>(null);
@@ -850,6 +853,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'sales-plan', label: 'Продажи (план)', icon: 'ShoppingCart' },
     { id: 'planning', label: 'Планирование', icon: 'Target' },
     { id: 'notifications', label: 'Уведомления', icon: 'Bell' },
+    { id: 'project', label: 'Проект', icon: 'Key', directorOnly: true },
   ];
   const tabs = allTabs.filter(t => !t.directorOnly || isDirector);
 
@@ -1269,6 +1273,56 @@ export default function Settings({ store }: SettingsProps) {
           onUpdate={updateNotificationCategory}
           onRemove={removeNotificationCategory}
         />
+      )}
+
+      {tab === 'project' && (
+        <div className="space-y-4 animate-fade-in max-w-md">
+          <div className="bg-white border border-border rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
+                <Icon name="Key" size={16} className="text-primary-foreground" />
+              </div>
+              <div>
+                <div className="font-semibold">Код проекта</div>
+                <div className="text-xs text-muted-foreground">Сотрудники вводят этот код при входе</div>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Код проекта</Label>
+              <Input
+                value={projectCodeInput}
+                onChange={e => { setProjectCodeInput(e.target.value.toUpperCase()); setProjectCodeSaved(false); }}
+                placeholder="FIT-XXXX"
+                className="font-mono text-lg tracking-widest"
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">Используйте латинские буквы и цифры. Например: FIT-7842</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => { if (projectCodeInput.trim()) { updateProjectCode(projectCodeInput.trim()); setProjectCodeSaved(true); } }}
+                disabled={!projectCodeInput.trim() || projectCodeInput.trim() === state.projectCode}
+                className="bg-foreground text-primary-foreground hover:opacity-90"
+              >
+                <Icon name="Save" size={14} className="mr-1.5" />
+                Сохранить
+              </Button>
+              {projectCodeSaved && (
+                <span className="text-xs text-emerald-600 flex items-center gap-1">
+                  <Icon name="CheckCircle" size={13} />
+                  Сохранено
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-start gap-2">
+              <Icon name="AlertTriangle" size={15} className="text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-800">
+                Если сменить код — сотрудники не смогут войти со старым кодом. Сообщите всем сотрудникам новый код проекта.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modals */}

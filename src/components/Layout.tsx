@@ -22,6 +22,7 @@ const ALL_NAV_ITEMS = [
   { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard', permKey: 'menuSubscriptions' as keyof Permission },
   { id: 'sales', label: 'Продажи', icon: 'ShoppingBag', permKey: 'menuSales' as keyof Permission },
   { id: 'finance', label: 'Финансы', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
+  { id: 'cash', label: 'Касса', icon: 'Landmark', permKey: 'menuCash' as keyof Permission },
   { id: 'notifications', label: 'Уведомления', icon: 'Bell', permKey: 'menuDashboard' as keyof Permission },
   { id: 'branches', label: 'Филиалы', icon: 'Building2', permKey: 'menuBranches' as keyof Permission },
   { id: 'staff', label: 'Сотрудники', icon: 'UserCog', permKey: 'menuStaff' as keyof Permission },

@@ -16,6 +16,7 @@ import Staff from '@/pages/Staff';
 import Settings from '@/pages/Settings';
 import Reports from '@/pages/Reports';
 import Notifications from '@/pages/Notifications';
+import Cash from '@/pages/Cash';
 import Login from '@/pages/Login';
 
 export default function App() {
@@ -110,6 +111,7 @@ export default function App() {
       case 'subscriptions': return <Subscriptions store={store} onSell={handleSell} />;
       case 'sales': return <Sales store={store} onSell={() => handleSell()} />;
       case 'finance': return <Finance store={store} />;
+      case 'cash': return <Cash store={store} />;
       case 'branches': return <Branches store={store} />;
       case 'staff': return <Staff store={store} />;
       case 'settings': return <Settings store={store} />;
