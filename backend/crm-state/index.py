@@ -43,11 +43,11 @@ def handler(event: dict, context) -> dict:
                 if data is None:
                     return {'statusCode': 400, 'headers': cors,
                             'body': json.dumps({'ok': False, 'error': 'no data'})}
+                data_json = json.dumps(data, ensure_ascii=False).replace("'", "''")
                 cur.execute(
                     f"""INSERT INTO {SCHEMA}.crm_state (id, data, updated_at)
-                        VALUES ('main', %s, NOW())
-                        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()""",
-                    (json.dumps(data),)
+                        VALUES ('main', '{data_json}'::jsonb, NOW())
+                        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()"""
                 )
                 conn.commit()
                 return {'statusCode': 200, 'headers': cors, 'body': json.dumps({'ok': True})}
@@ -59,8 +59,7 @@ def handler(event: dict, context) -> dict:
                 if not row:
                     token = secrets.token_urlsafe(24)
                     cur.execute(
-                        f"INSERT INTO {SCHEMA}.crm_access_token (id, token) VALUES ('main', %s)",
-                        (token,)
+                        f"INSERT INTO {SCHEMA}.crm_access_token (id, token) VALUES ('main', '{token}')"
                     )
                     conn.commit()
                 else:
@@ -72,9 +71,8 @@ def handler(event: dict, context) -> dict:
                 token = secrets.token_urlsafe(24)
                 cur.execute(
                     f"""INSERT INTO {SCHEMA}.crm_access_token (id, token, updated_at)
-                        VALUES ('main', %s, NOW())
-                        ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()""",
-                    (token,)
+                        VALUES ('main', '{token}', NOW())
+                        ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()"""
                 )
                 conn.commit()
                 return {'statusCode': 200, 'headers': cors,
