@@ -1500,7 +1500,10 @@ async function saveStateToDb(s: AppState) {
 export async function loadStateFromDb(): Promise<AppState | null> {
   if (!CRM_STATE_URL) return null;
   try {
-    const res = await fetch(`${CRM_STATE_URL}?action=state`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${CRM_STATE_URL}?action=state`, { signal: controller.signal });
+    clearTimeout(timer);
     const json = await res.json();
     return json.data || null;
   } catch { return null; }

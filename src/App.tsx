@@ -106,6 +106,12 @@ export default function App() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
           </svg>
           <span className="text-sm">Загрузка...</span>
+          <button
+            onClick={() => { localStorage.clear(); window.location.reload(); }}
+            className="mt-4 text-xs text-muted-foreground underline"
+          >
+            Не загружается? Нажми сюда
+          </button>
         </div>
       </div>
     );
