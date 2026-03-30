@@ -104,6 +104,7 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
   const profit = totalRevenue - totalExpenses;
   const margin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0;
   const totalDiscounts = branchSales.reduce((s, x) => s + (x.price - x.finalPrice), 0);
+  const totalBonusSpent = branchSales.reduce((s, x) => s + (x.bonusUsed || 0), 0);
   const avgCheck = totalSubs > 0 ? Math.round(subRevenue / totalSubs) : 0;
 
   // Funnel
@@ -195,6 +196,7 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
             ...(totalReturns > 0 ? [{ label: 'Возвраты абонементов', value: -totalReturns, color: 'text-orange-600', bold: false }] : []),
             { label: 'Прибыль', value: profit, color: profit >= 0 ? 'text-emerald-600' : 'text-red-500', bold: true },
             { label: 'Скидки (потери)', value: -totalDiscounts, color: 'text-orange-500', bold: false },
+            ...(totalBonusSpent > 0 ? [{ label: 'Оплачено бонусами', value: -totalBonusSpent, color: 'text-amber-600', bold: false }] : []),
           ].map(item => (
             <div key={item.label} className="flex items-center justify-between py-0.5">
               <span className="text-sm text-muted-foreground">{item.label}</span>

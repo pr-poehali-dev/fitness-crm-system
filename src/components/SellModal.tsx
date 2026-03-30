@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,22 +16,25 @@ interface SellModalProps {
 const fmt = (d: Date) => d.toISOString().split('T')[0];
 
 export default function SellModal({ open, onClose, store, preselectedClientId }: SellModalProps) {
-  const { state, sellSubscription, sellSingleVisit, getClientFullName, addClientToBranch } = store;
-  const [step, setStep] = useState<'client' | 'product' | 'confirm'>('client');
+  const { state, sellSubscription, sellSingleVisit, getClientFullName, addClientToBranch, getClientBonusBalance } = store;
+  const [step, setStep] = useState<'client' | 'product'>('client');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClientId, setSelectedClientId] = useState(preselectedClientId || '');
   const [selectedType, setSelectedType] = useState<'subscription' | 'single'>('subscription');
   const [selectedItemId, setSelectedItemId] = useState('');
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('card');
-
-  // Дата продажи
   const [saleDate, setSaleDate] = useState(fmt(new Date()));
   const isBackDate = saleDate < fmt(new Date());
-
-  // Поля для задним числом (абонемент)
   const [activationDate, setActivationDate] = useState('');
   const [sessionsSpent, setSessionsSpent] = useState(0);
+
+  // Бонусы
+  const [useBonus, setUseBonus] = useState(false);
+  const [bonusAmount, setBonusAmount] = useState(0);
+
+  const bonusSettings = state.bonusSettings;
+  const bonusEnabled = bonusSettings?.enabled;
 
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
   const isPhoneSearch = clientSearch.replace(/\D/g, '').length >= 5;
@@ -43,17 +46,40 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
     : branchClients.slice(0, 8);
 
   const selectedClient = state.clients.find(c => c.id === selectedClientId);
+  const clientBonusBalance = selectedClientId ? getClientBonusBalance(selectedClientId, state.currentBranchId) : 0;
+
   const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
   const branchSinglePlans = state.singleVisitPlans.filter(p => p.branchId === state.currentBranchId);
   const items = selectedType === 'subscription' ? branchPlans : branchSinglePlans;
   const selectedItem = items.find(i => i.id === selectedItemId);
   const price = selectedItem?.price || 0;
-  const finalPrice = Math.round(price * (1 - discount / 100));
+  const priceAfterDiscount = Math.round(price * (1 - discount / 100));
+
+  const maxBonus = Math.min(clientBonusBalance, priceAfterDiscount);
+  const effectiveBonusAmount = useBonus ? Math.min(bonusAmount, maxBonus) : 0;
+  const remainingAfterBonus = priceAfterDiscount - effectiveBonusAmount;
+  const paidByBonus = effectiveBonusAmount === priceAfterDiscount;
+
+  // Начисление бонусов с суммы остатка (не с бонусной части)
+  const bonusAccrual = bonusEnabled && bonusSettings.accrualPercent
+    ? Math.round(remainingAfterBonus * bonusSettings.accrualPercent / 100)
+    : 0;
 
   const selectedPlan = selectedType === 'subscription'
     ? state.subscriptionPlans.find(p => p.id === selectedItemId)
     : null;
   const hasSessionsLimit = selectedPlan && selectedPlan.sessionsLimit !== 'unlimited';
+
+  // При смене клиента — сбросить бонус
+  useEffect(() => {
+    setUseBonus(false);
+    setBonusAmount(0);
+  }, [selectedClientId]);
+
+  // При изменении суммы — корректировать бонус
+  useEffect(() => {
+    if (useBonus) setBonusAmount(Math.min(bonusAmount, maxBonus));
+  }, [priceAfterDiscount, maxBonus]);
 
   const handleConfirm = () => {
     if (!selectedClientId || !selectedItemId) return;
@@ -61,16 +87,24 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
     if (client && client.branchId !== state.currentBranchId) {
       addClientToBranch(selectedClientId, state.currentBranchId);
     }
+    const finalPaymentMethod = effectiveBonusAmount > 0
+      ? (paidByBonus ? 'bonus' : paymentMethod)
+      : paymentMethod;
+
     if (selectedType === 'subscription') {
-      sellSubscription(selectedClientId, selectedItemId, discount, paymentMethod, {
+      sellSubscription(selectedClientId, selectedItemId, discount, finalPaymentMethod, {
         saleDate,
         activationDate: isBackDate && activationDate ? activationDate : undefined,
         sessionsSpent: isBackDate && hasSessionsLimit && sessionsSpent > 0 ? sessionsSpent : undefined,
+        bonusUsed: effectiveBonusAmount || undefined,
+        bonusPaymentMethod: effectiveBonusAmount > 0 && !paidByBonus ? paymentMethod : undefined,
       });
     } else {
-      sellSingleVisit(selectedClientId, selectedItemId, paymentMethod, {
+      sellSingleVisit(selectedClientId, selectedItemId, finalPaymentMethod, {
         discount,
         saleDate,
+        bonusUsed: effectiveBonusAmount || undefined,
+        bonusPaymentMethod: effectiveBonusAmount > 0 && !paidByBonus ? paymentMethod : undefined,
       });
     }
     handleClose();
@@ -86,6 +120,8 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
     setActivationDate('');
     setSessionsSpent(0);
     setClientSearch('');
+    setUseBonus(false);
+    setBonusAmount(0);
   };
 
   return (
@@ -109,6 +145,7 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {filteredClients.map(c => {
                 const isOtherBranch = c.branchId !== state.currentBranchId;
+                const bal = getClientBonusBalance(c.id, state.currentBranchId);
                 return (
                   <button
                     key={c.id}
@@ -126,9 +163,16 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                       </div>
                       <div className="text-xs text-muted-foreground">{c.phone}</div>
                     </div>
-                    {c.activeSubscriptionId && (
-                      <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">абонемент</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {bonusEnabled && bal > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                          {bal} бонусов
+                        </span>
+                      )}
+                      {c.activeSubscriptionId && (
+                        <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">абонемент</span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -144,6 +188,11 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
             <div className="overflow-y-auto flex-1 space-y-4 pr-1">
               <button onClick={() => setStep('client')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                 <Icon name="ChevronLeft" size={14} /> {getClientFullName(selectedClient)}
+                {bonusEnabled && clientBonusBalance > 0 && (
+                  <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    {clientBonusBalance} бонусов
+                  </span>
+                )}
               </button>
 
               <div className="flex gap-2">
@@ -172,13 +221,7 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
 
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">Скидка (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={discount}
-                  onChange={e => setDiscount(Number(e.target.value))}
-                />
+                <Input type="number" min={0} max={100} value={discount} onChange={e => setDiscount(Number(e.target.value))} />
               </div>
 
               <div>
@@ -189,10 +232,7 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                   max={fmt(new Date())}
                   onChange={e => {
                     setSaleDate(e.target.value);
-                    if (e.target.value >= fmt(new Date())) {
-                      setActivationDate('');
-                      setSessionsSpent(0);
-                    }
+                    if (e.target.value >= fmt(new Date())) { setActivationDate(''); setSessionsSpent(0); }
                   }}
                 />
               </div>
@@ -205,13 +245,7 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1.5 block">Дата активации абонемента</Label>
-                    <Input
-                      type="date"
-                      value={activationDate}
-                      max={fmt(new Date())}
-                      onChange={e => setActivationDate(e.target.value)}
-                      placeholder="Когда клиент начал ходить"
-                    />
+                    <Input type="date" value={activationDate} max={fmt(new Date())} onChange={e => setActivationDate(e.target.value)} />
                   </div>
                   {hasSessionsLimit && (
                     <div>
@@ -219,11 +253,8 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                         Уже потрачено тренировок (из {selectedPlan!.sessionsLimit})
                       </Label>
                       <Input
-                        type="number"
-                        min={0}
-                        max={selectedPlan!.sessionsLimit as number}
-                        value={sessionsSpent}
-                        onChange={e => setSessionsSpent(Number(e.target.value))}
+                        type="number" min={0} max={selectedPlan!.sessionsLimit as number}
+                        value={sessionsSpent} onChange={e => setSessionsSpent(Number(e.target.value))}
                       />
                       <p className="text-xs text-muted-foreground mt-1">
                         Останется: {Math.max(0, (selectedPlan!.sessionsLimit as number) - sessionsSpent)} тренировок
@@ -233,38 +264,100 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                 </div>
               )}
 
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Способ оплаты</Label>
-                <div className="flex gap-2">
-                  {(['cash', 'card'] as const).map(m => (
-                    <button
-                      key={m}
-                      onClick={() => setPaymentMethod(m)}
-                      className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${paymentMethod === m ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}
-                    >
-                      {m === 'cash' ? '💵 Наличные' : '💳 Безналичные'}
-                    </button>
-                  ))}
+              {/* Бонусы */}
+              {bonusEnabled && selectedItemId && clientBonusBalance > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useBonus}
+                      onChange={e => {
+                        setUseBonus(e.target.checked);
+                        if (e.target.checked) setBonusAmount(maxBonus);
+                        else setBonusAmount(0);
+                      }}
+                      className="accent-amber-500"
+                    />
+                    <span className="text-sm font-medium text-amber-800">
+                      Оплатить бонусами (доступно: {clientBonusBalance})
+                    </span>
+                  </label>
+                  {useBonus && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={maxBonus}
+                          value={bonusAmount}
+                          onChange={e => setBonusAmount(Math.min(Number(e.target.value), maxBonus))}
+                          className="w-32 bg-white"
+                        />
+                        <span className="text-xs text-amber-700">из {maxBonus} возможных</span>
+                        <button onClick={() => setBonusAmount(maxBonus)} className="text-xs text-amber-700 underline">всё</button>
+                      </div>
+                      {!paidByBonus && (
+                        <p className="text-xs text-amber-700">
+                          Остаток {remainingAfterBonus.toLocaleString()} ₽ — выберите способ оплаты ниже
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* Способ оплаты остатка */}
+              {(!useBonus || !paidByBonus) && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    {useBonus && !paidByBonus ? 'Способ оплаты остатка' : 'Способ оплаты'}
+                  </Label>
+                  <div className="flex gap-2">
+                    {(['cash', 'card'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setPaymentMethod(m)}
+                        className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${paymentMethod === m ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}
+                      >
+                        {m === 'cash' ? '💵 Наличные' : '💳 Безналичные'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex-shrink-0 space-y-3">
               {selectedItemId && (
-                <div className="bg-secondary rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">К оплате</span>
-                  <div className="text-right">
-                    {discount > 0 && <div className="text-xs text-muted-foreground line-through">{price.toLocaleString()} ₽</div>}
-                    <div className="text-base font-semibold">{finalPrice.toLocaleString()} ₽</div>
-                    {discount > 0 && <div className="text-xs text-emerald-600">скидка {discount}%</div>}
+                <div className="bg-secondary rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Стоимость</span>
+                    <div className="text-right">
+                      {discount > 0 && <div className="text-xs text-muted-foreground line-through">{price.toLocaleString()} ₽</div>}
+                      <div className="text-sm font-medium">{priceAfterDiscount.toLocaleString()} ₽</div>
+                    </div>
                   </div>
+                  {effectiveBonusAmount > 0 && (
+                    <div className="flex items-center justify-between text-amber-700">
+                      <span className="text-sm">Бонусами</span>
+                      <span className="text-sm font-medium">−{effectiveBonusAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-border pt-1.5">
+                    <span className="text-sm font-semibold">К оплате</span>
+                    <span className="text-base font-bold">
+                      {remainingAfterBonus > 0 ? `${remainingAfterBonus.toLocaleString()} ₽` : 'Бесплатно 🎉'}
+                    </span>
+                  </div>
+                  {bonusEnabled && bonusAccrual > 0 && (
+                    <div className="flex items-center justify-between text-emerald-600 text-xs">
+                      <span>Начислим бонусов</span>
+                      <span>+{bonusAccrual}</span>
+                    </div>
+                  )}
                 </div>
               )}
-              <Button
-                onClick={handleConfirm}
-                disabled={!selectedItemId}
-                className="w-full"
-              >
+              <Button onClick={handleConfirm} disabled={!selectedItemId} className="w-full">
                 Провести продажу
               </Button>
             </div>

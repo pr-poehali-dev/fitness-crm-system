@@ -23,7 +23,7 @@ const CHANNEL_ICONS: Record<string, string> = {
 };
 
 export default function ClientCard({ client, store, onClose, onSell }: ClientCardProps) {
-  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient } = store;
+  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient, getClientBonusBalance } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
@@ -147,6 +147,28 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               <div className="text-xs text-muted-foreground mt-0.5">за тренировку</div>
             </div>
           </div>
+          {state.bonusSettings?.enabled && (() => {
+            const balance = getClientBonusBalance(client.id, client.branchId);
+            const txs = (state.bonusTransactions || []).filter(t => t.clientId === client.id && t.branchId === client.branchId);
+            const totalAccrued = txs.filter(t => t.type === 'accrual').reduce((s, t) => s + t.amount, 0);
+            const totalSpentBonus = txs.filter(t => t.type === 'spend').reduce((s, t) => s + t.amount, 0);
+            return (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎁</span>
+                  <div>
+                    <div className="text-sm font-semibold text-amber-800">{balance} бонусов</div>
+                    <div className="text-xs text-amber-600">начислено {totalAccrued} · потрачено {totalSpentBonus}</div>
+                  </div>
+                </div>
+                {state.bonusSettings.expiryDays && totalAccrued > 0 && (
+                  <div className="text-xs text-amber-600 text-right">
+                    срок действия<br/>{state.bonusSettings.expiryDays} дн.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Info */}

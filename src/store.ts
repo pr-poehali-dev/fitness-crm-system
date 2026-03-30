@@ -150,12 +150,32 @@ export interface Sale {
   price: number;
   discount: number;
   finalPrice: number;
-  paymentMethod: 'cash' | 'card';
+  paymentMethod: 'cash' | 'card' | 'bonus';
   date: string;
   branchId: string;
   isFirstSubscription: boolean;
   isReturn: boolean;
   isRenewal: boolean;
+  bonusUsed?: number;       // сколько бонусов списано
+  bonusAccrued?: number;    // сколько бонусов начислено
+  bonusPaymentMethod?: 'cash' | 'card'; // способ оплаты остатка если бонусов не хватило
+}
+
+export interface BonusTransaction {
+  id: string;
+  clientId: string;
+  branchId: string;
+  type: 'accrual' | 'spend';
+  amount: number;
+  saleId?: string;
+  date: string;
+  expiresAt?: string;
+}
+
+export interface BonusSettings {
+  enabled: boolean;
+  accrualPercent: number;   // % от суммы покупки → бонусы
+  expiryDays: number | null; // дней до сгорания (null = не сгорают)
 }
 
 
@@ -518,6 +538,8 @@ export interface AppState {
   projectCode: string;
   cashOperations: CashOperation[];
   shifts: Shift[];
+  bonusSettings: BonusSettings;
+  bonusTransactions: BonusTransaction[];
 }
 
 const defaultStaff: StaffMember[] = [
@@ -571,6 +593,8 @@ const initialState: AppState = {
   projectCode: 'FIT-7842',
   cashOperations: [],
   shifts: [],
+  bonusSettings: { enabled: false, accrualPercent: 5, expiryDays: 365 },
+  bonusTransactions: [],
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -1629,8 +1653,8 @@ export function useStore() {
 
   // Sales & Subscriptions
   const sellSubscription = (
-    clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card',
-    opts?: { saleDate?: string; activationDate?: string; sessionsSpent?: number }
+    clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card' | 'bonus',
+    opts?: { saleDate?: string; activationDate?: string; sessionsSpent?: number; bonusUsed?: number; bonusPaymentMethod?: 'cash' | 'card' }
   ) => {
     const plan = state.subscriptionPlans.find(p => p.id === planId);
     if (!plan) return;
@@ -1671,34 +1695,61 @@ export function useStore() {
       activatedAt: activationDate ?? (hasPendingMode ? null : saleDate),
       autoActivateDate,
     };
+    const bonusUsed = opts?.bonusUsed ?? 0;
+    const bonusAccrued = state.bonusSettings?.enabled
+      ? Math.round((finalPrice - bonusUsed) * (state.bonusSettings.accrualPercent / 100))
+      : 0;
     const newSale: Sale = {
       id: saleId, clientId, type: 'subscription', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
       date: saleDate, branchId: plan.branchId,
-      isFirstSubscription: isFirst, isReturn, isRenewal
+      isFirstSubscription: isFirst, isReturn, isRenewal,
+      bonusUsed: bonusUsed || undefined,
+      bonusAccrued: bonusAccrued || undefined,
+      bonusPaymentMethod: opts?.bonusPaymentMethod,
     };
     update(s => ({
       ...s,
       subscriptions: [...s.subscriptions, newSub],
       clients: s.clients.map(c => c.id === clientId ? { ...c, activeSubscriptionId: subId } : c),
-      sales: [...s.sales, newSale]
+      sales: [...s.sales, newSale],
+      bonusTransactions: [
+        ...(s.bonusTransactions || []),
+        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
+        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
+      ],
     }));
   };
 
-  const sellSingleVisit = (clientId: string, planId: string, paymentMethod: 'cash' | 'card', opts?: { discount?: number; saleDate?: string }) => {
+  const sellSingleVisit = (clientId: string, planId: string, paymentMethod: 'cash' | 'card' | 'bonus', opts?: { discount?: number; saleDate?: string; bonusUsed?: number; bonusPaymentMethod?: 'cash' | 'card' }) => {
     const plan = state.singleVisitPlans.find(p => p.id === planId);
     if (!plan) return;
     const saleId = genId();
     const discount = opts?.discount ?? 0;
     const saleDate = opts?.saleDate ?? fmt(new Date());
     const finalPrice = Math.round(plan.price * (1 - discount / 100));
+    const bonusUsed = opts?.bonusUsed ?? 0;
+    const bonusAccrued = state.bonusSettings?.enabled
+      ? Math.round((finalPrice - bonusUsed) * (state.bonusSettings.accrualPercent / 100))
+      : 0;
     const newSale: Sale = {
       id: saleId, clientId, type: 'single', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
       date: saleDate, branchId: plan.branchId,
-      isFirstSubscription: false, isReturn: false, isRenewal: false
+      isFirstSubscription: false, isReturn: false, isRenewal: false,
+      bonusUsed: bonusUsed || undefined,
+      bonusAccrued: bonusAccrued || undefined,
+      bonusPaymentMethod: opts?.bonusPaymentMethod,
     };
-    update(s => ({ ...s, sales: [...s.sales, newSale] }));
+    update(s => ({
+      ...s,
+      sales: [...s.sales, newSale],
+      bonusTransactions: [
+        ...(s.bonusTransactions || []),
+        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
+        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
+      ],
+    }));
   };
 
   // Продажа доплаты (extra) за конкретную тренировку
@@ -2158,6 +2209,36 @@ export function useStore() {
     return (state.shifts || []).find(sh => sh.staffId === staffId && sh.branchId === branchId && !sh.closedAt) || null;
   };
 
+  // Бонусная система
+  const getClientBonusBalance = (clientId: string, branchId: string): number => {
+    const today = fmt(new Date());
+    const txs = (state.bonusTransactions || []).filter(t => t.clientId === clientId && t.branchId === branchId);
+    const accrued = txs
+      .filter(t => t.type === 'accrual' && (!t.expiresAt || t.expiresAt >= today))
+      .reduce((s, t) => s + t.amount, 0);
+    const spent = txs.filter(t => t.type === 'spend').reduce((s, t) => s + t.amount, 0);
+    return Math.max(0, Math.round(accrued - spent));
+  };
+
+  const accrueBonus = (clientId: string, branchId: string, saleId: string, purchaseAmount: number) => {
+    const settings = state.bonusSettings;
+    if (!settings?.enabled || !settings.accrualPercent) return;
+    const amount = Math.round(purchaseAmount * settings.accrualPercent / 100);
+    if (amount <= 0) return;
+    const expiresAt = settings.expiryDays ? fmt(addDays(new Date(), settings.expiryDays)) : undefined;
+    const tx: BonusTransaction = { id: genId(), clientId, branchId, type: 'accrual', amount, saleId, date: fmt(new Date()), expiresAt };
+    update(s => ({ ...s, bonusTransactions: [...(s.bonusTransactions || []), tx] }));
+  };
+
+  const spendBonus = (clientId: string, branchId: string, saleId: string, amount: number) => {
+    const tx: BonusTransaction = { id: genId(), clientId, branchId, type: 'spend', amount, saleId, date: fmt(new Date()) };
+    update(s => ({ ...s, bonusTransactions: [...(s.bonusTransactions || []), tx] }));
+  };
+
+  const updateBonusSettings = (settings: BonusSettings) => {
+    update(s => ({ ...s, bonusSettings: settings }));
+  };
+
   return {
     state,
     dbLoaded,
@@ -2185,6 +2266,7 @@ export function useStore() {
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
     addCashOperation, deleteCashOperation, updateProjectCode,
     openShift, closeShift, getActiveShift,
+    getClientBonusBalance, accrueBonus, spendBonus, updateBonusSettings,
   };
 }
 

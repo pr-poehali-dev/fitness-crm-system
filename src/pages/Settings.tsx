@@ -12,7 +12,7 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications' | 'project';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications' | 'project' | 'bonus';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -792,7 +792,7 @@ export default function Settings({ store }: SettingsProps) {
     addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
     setMonthlyPlan, setExpensePlan, setSalesPlan,
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
-    updateProjectCode,
+    updateProjectCode, updateBonusSettings,
   } = store;
 
   const [tab, setTab] = useState<Tab>('trainings');
@@ -853,6 +853,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'sales-plan', label: 'Продажи (план)', icon: 'ShoppingCart' },
     { id: 'planning', label: 'Планирование', icon: 'Target' },
     { id: 'notifications', label: 'Уведомления', icon: 'Bell' },
+    { id: 'bonus', label: 'Бонусы', icon: 'Gift', directorOnly: true },
     { id: 'project', label: 'Проект', icon: 'Key', directorOnly: true },
   ];
   const tabs = allTabs.filter(t => !t.directorOnly || isDirector);
@@ -1324,6 +1325,78 @@ export default function Settings({ store }: SettingsProps) {
           </div>
         </div>
       )}
+
+      {tab === 'bonus' && (() => {
+        const bs = state.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 };
+        return (
+          <div className="space-y-4 animate-fade-in max-w-md">
+            <div className="bg-white border border-border rounded-xl p-6 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
+                  <Icon name="Gift" size={16} className="text-primary-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold">Бонусная программа</div>
+                  <div className="text-xs text-muted-foreground">Клиенты накапливают бонусы с каждой покупки</div>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  onClick={() => updateBonusSettings({ ...bs, enabled: !bs.enabled })}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${bs.enabled ? 'bg-foreground' : 'bg-border'}`}
+                >
+                  <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${bs.enabled ? 'translate-x-5' : ''}`} />
+                </div>
+                <span className="text-sm font-medium">{bs.enabled ? 'Включена' : 'Выключена'}</span>
+              </label>
+
+              {bs.enabled && (
+                <>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">% начисления от суммы покупки</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number" min={1} max={50}
+                        value={bs.accrualPercent}
+                        onChange={e => updateBonusSettings({ ...bs, accrualPercent: Number(e.target.value) })}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">% → бонусы</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Пример: при покупке на 3 000 ₽ клиент получит {Math.round(3000 * bs.accrualPercent / 100)} бонусов
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Срок действия бонусов (дней)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number" min={0}
+                        value={bs.expiryDays ?? ''}
+                        onChange={e => updateBonusSettings({ ...bs, expiryDays: e.target.value ? Number(e.target.value) : null })}
+                        placeholder="Не сгорают"
+                        className="w-32"
+                      />
+                      <span className="text-sm text-muted-foreground">дней</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Оставьте пустым — бонусы не сгорают</p>
+                  </div>
+
+                  <div className="bg-secondary rounded-xl p-4 space-y-1 text-sm">
+                    <div className="font-medium mb-2">Как работает:</div>
+                    <div className="text-muted-foreground">• Покупка на 5 000 ₽ → +{Math.round(5000 * bs.accrualPercent / 100)} бонусов</div>
+                    <div className="text-muted-foreground">• 1 бонус = 1 рубль при оплате</div>
+                    <div className="text-muted-foreground">• Бонусы не начисляются на ту часть, что оплачена бонусами</div>
+                    {bs.expiryDays && <div className="text-muted-foreground">• Бонусы сгорают через {bs.expiryDays} дней</div>}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modals */}
       <Dialog open={showAddTraining} onOpenChange={setShowAddTraining}>
