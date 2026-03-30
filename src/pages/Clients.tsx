@@ -21,10 +21,6 @@ const categories: { id: ClientCategory | 'all'; label: string }[] = [
   { id: 'lost', label: 'Потерянные' },
 ];
 
-const CHANNELS = ['whatsapp', 'telegram', 'phone', 'instagram', 'vk'];
-const REFERRALS = ['Друзья', 'Интернет', 'Мимо проходил(а)', 'Блогер', 'Реклама', 'Другое'];
-const AD_SOURCES = ['Instagram', 'VK', 'Яндекс', 'Google', 'Листовка', 'Сарафанное радио', 'Другое'];
-
 export default function Clients({ store, onSell }: ClientsProps) {
   const { state, addClient, getClientCategory, getClientFullName, findClientByPhone } = store;
   const [search, setSearch] = useState('');
@@ -34,7 +30,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [form, setForm] = useState({
     firstName: '', lastName: '', middleName: '', phone: '',
-    contactChannel: 'whatsapp' as Client['contactChannel'],
+    contactChannel: '' as Client['contactChannel'],
     referralSource: '', adSource: '', birthDate: '', comment: ''
   });
 
@@ -319,7 +315,8 @@ export default function Clients({ store, onSell }: ClientsProps) {
                 onChange={e => setForm(f => ({ ...f, contactChannel: e.target.value as Client['contactChannel'] }))}
                 className="w-full border border-input rounded-lg px-3 py-2 text-sm"
               >
-                {CHANNELS.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                <option value="">Выберите...</option>
+                {state.contactChannels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
               </select>
             </div>
 
@@ -331,7 +328,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
                 className="w-full border border-input rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">Выберите...</option>
-                {AD_SOURCES.map(a => <option key={a} value={a}>{a}</option>)}
+                {state.adSources.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div className="col-span-2">

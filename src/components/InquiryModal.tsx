@@ -36,7 +36,7 @@ export default function InquiryModal({ open, onClose, store }: InquiryModalProps
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Icon name="PhoneIncoming" size={16} />
