@@ -2493,8 +2493,9 @@ export function useStore() {
   // При первом запуске — пробуем загрузить из БД (приоритет над localStorage)
   useEffect(() => {
     if (dbLoaded) return;
-    // Запоминаем staff из localStorage ДО загрузки БД (там могут быть сотрудники из ?sl= ссылки)
-    const localStaff = loadState().staff;
+    // Запоминаем локальный state ДО загрузки БД
+    const localState = loadState();
+    const localStaff = localState.staff;
     loadStateFromDb().then(dbState => {
       // Проверяем что из БД пришёл реальный state (есть массив staff), а не мусор
       const isValidState = dbState && Array.isArray(dbState.staff) && dbState.staff.length > 0;
@@ -2512,9 +2513,21 @@ export function useStore() {
         });
         const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
+
+        // Мёрджим записи которые могут быть в localStorage но ещё не в БД
+        const dbExpenseIds = new Set((dbState.expenses || []).map((e: Expense) => e.id));
+        const extraExpenses = (localState.expenses || []).filter(e => !dbExpenseIds.has(e.id));
+        const dbCashOpIds = new Set((dbState.cashOperations || []).map((o: CashOperation) => o.id));
+        const extraCashOps = (localState.cashOperations || []).filter(o => !dbCashOpIds.has(o.id));
+        const dbSaleIds = new Set((dbState.sales || []).map((s: Sale) => s.id));
+        const extraSales = (localState.sales || []).filter(s => !dbSaleIds.has(s.id));
+
         let merged: AppState = {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+          expenses: extraExpenses.length > 0 ? [...(dbState.expenses || []), ...extraExpenses] : (dbState.expenses || []),
+          cashOperations: extraCashOps.length > 0 ? [...(dbState.cashOperations || []), ...extraCashOps] : (dbState.cashOperations || []),
+          sales: extraSales.length > 0 ? [...(dbState.sales || []), ...extraSales] : (dbState.sales || []),
           shifts: dbState.shifts || [],
           bonusTransactions: dbState.bonusTransactions || [],
           bonusSettings: dbState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
