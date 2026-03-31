@@ -134,6 +134,7 @@ export interface Visit {
   status: 'attended' | 'missed' | 'enrolled' | 'cancelled';
   subscriptionId: string | null;
   isSingleVisit: boolean;
+  singlePlanId?: string | null;
   price: number;
 }
 
@@ -2856,7 +2857,7 @@ export function useStore() {
     }));
   };
 
-  const markVisit = (visitId: string, status: 'attended' | 'missed' | 'cancelled', subscriptionId: string | null, isSingleVisit: boolean, singlePrice: number) => {
+  const markVisit = (visitId: string, status: 'attended' | 'missed' | 'cancelled', subscriptionId: string | null, isSingleVisit: boolean, singlePrice: number, singlePlanId?: string | null) => {
     update(s => {
       let newSubs = s.subscriptions;
       if (status === 'attended' && subscriptionId) {
@@ -2878,7 +2879,7 @@ export function useStore() {
       }
       return {
         ...s,
-        visits: s.visits.map(v => v.id === visitId ? { ...v, status, subscriptionId, isSingleVisit, price: isSingleVisit ? singlePrice : 0 } : v),
+        visits: s.visits.map(v => v.id === visitId ? { ...v, status, subscriptionId, isSingleVisit, singlePlanId: isSingleVisit ? (singlePlanId ?? null) : null, price: isSingleVisit ? singlePrice : 0 } : v),
         subscriptions: newSubs
       };
     });

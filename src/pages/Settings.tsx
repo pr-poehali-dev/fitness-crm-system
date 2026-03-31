@@ -935,7 +935,7 @@ export default function Settings({ store }: SettingsProps) {
     if (editingSingle) {
       updateSingleVisitPlan(editingSingle.id, baseData);
     } else {
-      addSingleVisitPlan(baseData);
+      addSingleVisitPlan({ ...baseData, branchId: state.currentBranchId });
     }
     setShowAddSingle(false);
   };

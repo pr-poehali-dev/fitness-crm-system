@@ -55,7 +55,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   const [extraModal, setExtraModal] = useState<{
     clientId: string; entryId: string; visitId: string;
     subscriptionId: string | null; isSingleVisit: boolean; singlePrice: number;
-    extraPrice: number; extraPriceName: string;
+    singlePlanId?: string | null; extraPrice: number; extraPriceName: string;
   } | null>(null);
   const [extraPaymentMethod, setExtraPaymentMethod] = useState<'cash' | 'card'>('card');
 
@@ -239,6 +239,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
         subscriptionId: subId,
         isSingleVisit: isSingle,
         singlePrice: singlePlan?.price || 0,
+        singlePlanId: singlePlan?.id ?? null,
         extraPrice,
         extraPriceName: tt?.extraPriceName || 'Доплата',
       });
@@ -247,7 +248,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       return;
     }
 
-    markVisit(visit?.id || attendModal.visitId, 'attended', subId, isSingle, singlePlan?.price || 0);
+    markVisit(visit?.id || attendModal.visitId, 'attended', subId, isSingle, singlePlan?.price || 0, singlePlan?.id ?? null);
     setAttendModal(null);
     setSelectedBasis(null);
   };
@@ -255,7 +256,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   const handleConfirmExtra = () => {
     if (!extraModal) return;
     // Сначала отмечаем посещение
-    markVisit(extraModal.visitId, 'attended', extraModal.subscriptionId, extraModal.isSingleVisit, extraModal.singlePrice);
+    markVisit(extraModal.visitId, 'attended', extraModal.subscriptionId, extraModal.isSingleVisit, extraModal.singlePrice, extraModal.singlePlanId);
     // Потом проводим доплату
     sellExtra(extraModal.clientId, extraModal.extraPriceName, extraModal.extraPrice, extraPaymentMethod, state.currentBranchId);
     setExtraModal(null);
@@ -299,10 +300,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       return plan.allDirections || (tt ? plan.trainingTypeIds.includes(tt.id) : false);
     });
     const singles = state.singleVisitPlans.filter(p => {
-      if (p.branchId !== state.currentBranchId) return false;
+      if (p.branchId && p.branchId !== state.currentBranchId) return false;
       if (tt && p.trainingTypeIds.length > 0 && !p.trainingTypeIds.includes(tt.id)) return false;
       const purchasedCount = state.sales.filter(s => s.clientId === clientId && s.type === 'single' && s.itemId === p.id).length;
-      const usedCount = state.visits.filter(v => v.clientId === clientId && v.isSingleVisit && v.status === 'attended' && v.price === p.price).length;
+      const usedCount = state.visits.filter(v => v.clientId === clientId && v.isSingleVisit && v.status === 'attended' && (v.singlePlanId != null ? v.singlePlanId === p.id : v.price === p.price)).length;
       return purchasedCount > usedCount;
     });
     return { subscriptions: activeSubs, singles };
