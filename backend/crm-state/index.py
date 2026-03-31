@@ -9,9 +9,11 @@ def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
 
 def handler(event: dict, context) -> dict:
-    """Сохранение/загрузка состояния CRM и управление токеном доступа сотрудников.
-    ?action=state — работа с данными CRM
-    ?action=token — работа с токеном доступа для сотрудников
+    """Сохранение/загрузка состояния CRM.
+    GET  ?action=state         — загрузить всё
+    POST ?action=state         — сохранить всё (полный state)
+    POST ?action=patch         — обновить только указанные поля (patch)
+    GET/POST ?action=token     — токен доступа
     """
     cors = {
         'Access-Control-Allow-Origin': '*',
@@ -48,6 +50,24 @@ def handler(event: dict, context) -> dict:
                     f"""INSERT INTO {SCHEMA}.crm_state (id, data, updated_at)
                         VALUES ('main', '{data_json}'::jsonb, NOW())
                         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()"""
+                )
+                conn.commit()
+                return {'statusCode': 200, 'headers': cors, 'body': json.dumps({'ok': True})}
+
+        if action == 'patch':
+            if method == 'POST':
+                body = json.loads(event.get('body') or '{}')
+                patch = body.get('patch')
+                if not patch or not isinstance(patch, dict):
+                    return {'statusCode': 400, 'headers': cors,
+                            'body': json.dumps({'ok': False, 'error': 'no patch'})}
+                patch_json = json.dumps(patch, ensure_ascii=False).replace("'", "''")
+                cur.execute(
+                    f"""INSERT INTO {SCHEMA}.crm_state (id, data, updated_at)
+                        VALUES ('main', '{patch_json}'::jsonb, NOW())
+                        ON CONFLICT (id) DO UPDATE
+                          SET data = {SCHEMA}.crm_state.data || '{patch_json}'::jsonb,
+                              updated_at = NOW()"""
                 )
                 conn.commit()
                 return {'statusCode': 200, 'headers': cors, 'body': json.dumps({'ok': True})}

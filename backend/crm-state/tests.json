@@ -9,9 +9,10 @@
       "bodyMatcher": "partial"
     },
     {
-      "name": "Save state (no-op test)",
-      "method": "GET",
-      "path": "/?action=state",
+      "name": "Patch state",
+      "method": "POST",
+      "path": "/?action=patch",
+      "body": {"patch": {"_test": true}},
       "expectedStatus": 200,
       "expectedBody": {"ok": true},
       "bodyMatcher": "partial"

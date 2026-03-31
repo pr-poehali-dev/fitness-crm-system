@@ -2407,16 +2407,77 @@ function loadState(): AppState {
 // URL бэкенда — заполняется после деплоя
 const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE_URL__'] || '';
 
-async function saveStateToDb(s: AppState): Promise<boolean> {
-  if (!CRM_STATE_URL) return true;
-  try {
-    const res = await fetch(`${CRM_STATE_URL}?action=state`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: s }),
-    });
-    return res.ok;
-  } catch { return false; }
+// Ключи которые сохраняем через patch (маленькие, меняются часто)
+const PATCH_KEYS: (keyof AppState)[] = [
+  'sales', 'subscriptions', 'schedule', 'visits', 'clients',
+  'expenses', 'cashOperations', 'shifts', 'bonusTransactions',
+  'staff', 'currentBranchId', 'currentStaffId',
+  'subscriptionPlans', 'singleVisitPlans', 'trainingTypes',
+  'trainingCategories', 'trainers', 'halls', 'branches',
+  'inquiries', 'dismissedNotifications', 'failedNotifications',
+  'notificationCategories', 'adSources', 'contactChannels',
+  'salesPlans', 'monthlyPlans', 'expensePlans', 'expenseCategories',
+  'bonusSettings', 'projectCode',
+  'importedCvetnoiV1', 'importedCvetnoiV2', 'importedCvetnoiV3',
+  'importedBorV1', 'importedBorV2', 'importedTsentrV1', 'importedOlimpV1',
+];
+
+let _lastSavedState: AppState | null = null;
+let _pendingState: AppState | null = null;
+let _pendingOnSync: ((ok: boolean) => void) | null = null;
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+let _saving = false;
+
+async function flushToDb(): Promise<void> {
+  if (!_pendingState || _saving) return;
+  const s = _pendingState;
+  const onSync = _pendingOnSync;
+  _pendingState = null;
+  _pendingOnSync = null;
+  _saving = true;
+
+  const patch: Partial<AppState> = {};
+  for (const key of PATCH_KEYS) {
+    if (!_lastSavedState || s[key] !== _lastSavedState[key]) {
+      (patch as Record<string, unknown>)[key] = s[key];
+    }
+  }
+
+  if (Object.keys(patch).length === 0) {
+    _saving = false;
+    onSync?.(true);
+    return;
+  }
+
+  _lastSavedState = s;
+
+  const attemptSave = async (retries = 3): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(`${CRM_STATE_URL}?action=patch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patch }),
+        });
+        if (res.ok) return true;
+      } catch { /* retry */ }
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+    return false;
+  };
+
+  const ok = await attemptSave();
+  _saving = false;
+  onSync?.(ok);
+  if (_pendingState) flushToDb();
+}
+
+function saveStateToDb(s: AppState, onSync?: (ok: boolean) => void): void {
+  if (!CRM_STATE_URL) { onSync?.(true); return; }
+  _pendingState = s;
+  if (onSync) _pendingOnSync = onSync;
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => { _saveTimer = null; flushToDb(); }, 300);
 }
 
 export async function loadStateFromDb(): Promise<AppState | null> {
@@ -2453,17 +2514,12 @@ function saveState(s: AppState, onSync?: (ok: boolean) => void) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch (e) {
-    // localStorage переполнен — сохраняем без импортированных клиентов
     try {
       const slim = { ...s, clients: s.clients.filter(c => !c.dashboardExclude) };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
     } catch { /* ignore */ }
   }
-  if (onSync) {
-    saveStateToDb(s).then(ok => onSync(ok));
-  } else {
-    saveStateToDb(s);
-  }
+  saveStateToDb(s, onSync);
 }
 
 // Генерирует ссылку со списком сотрудников (логин+пароль) в base64
