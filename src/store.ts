@@ -2619,6 +2619,55 @@ export function useStore() {
     });
   }, []);
 
+  // Периодическое обновление данных с сервера (polling каждые 30 сек)
+  useEffect(() => {
+    if (!dbLoaded) return;
+    if (!CRM_STATE_URL) return;
+    const interval = setInterval(async () => {
+      if (_saving) return;
+      const dbState = await loadStateFromDb();
+      if (!dbState || !Array.isArray(dbState.staff) || dbState.staff.length === 0) return;
+      setState(cur => {
+        const mergeByIdUpdating = <T extends { id: string }>(dbItems: T[], curItems: T[]): T[] => {
+          const curMap = new Map(curItems.map(i => [i.id, i]));
+          const dbMap = new Map(dbItems.map(i => [i.id, i]));
+          const result: T[] = dbItems.map(dbItem => {
+            const curItem = curMap.get(dbItem.id);
+            if (!curItem) return dbItem;
+            return dbItem;
+          });
+          curItems.forEach(ci => { if (!dbMap.has(ci.id)) result.push(ci); });
+          return result;
+        };
+        const localStaffMap = new Map(cur.staff.map(s => [s.id, s]));
+        const mergedStaff = dbState.staff.map((s: StaffMember) => {
+          const local = localStaffMap.get(s.id);
+          if (!local) return s;
+          return { ...s, password: s.password || local.password, login: s.login || local.login };
+        });
+        const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
+        const extraStaff = cur.staff.filter(s => !dbStaffIds.has(s.id));
+        return {
+          ...dbState,
+          staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+          clients: mergeByIdUpdating(dbState.clients || [], cur.clients || []),
+          sales: mergeByIdUpdating(dbState.sales || [], cur.sales || []),
+          subscriptions: mergeByIdUpdating(dbState.subscriptions || [], cur.subscriptions || []),
+          schedule: mergeByIdUpdating(dbState.schedule || [], cur.schedule || []),
+          visits: mergeByIdUpdating(dbState.visits || [], cur.visits || []),
+          expenses: mergeByIdUpdating(dbState.expenses || [], cur.expenses || []),
+          cashOperations: mergeByIdUpdating(dbState.cashOperations || [], cur.cashOperations || []),
+          shifts: mergeByIdUpdating(dbState.shifts || [], cur.shifts || []),
+          bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
+          bonusSettings: dbState.bonusSettings || cur.bonusSettings,
+          currentStaffId: cur.currentStaffId,
+          currentBranchId: cur.currentBranchId,
+        };
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [dbLoaded]);
+
   // Импорт базы клиентов Олимпийский (однократно, после загрузки из БД)
   useEffect(() => {
     if (!dbLoaded) return;

@@ -166,7 +166,10 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
 
       // 5. Первая тренировка сегодня
       const firstDate = clientFirstVisitDate[client.id];
-      if (catMap['first_today']?.enabled && firstDate === todayStr) {
+      // Лояльный клиент без реальных посещений — это перенесённый клиент, "первые" уведомления не нужны
+      const hasRealVisits = state.visits.some(v => v.clientId === client.id && v.status === 'attended');
+      const isLoyalWithoutVisits = getClientCategory(client) === 'loyal' && !hasRealVisits;
+      if (!isLoyalWithoutVisits && catMap['first_today']?.enabled && firstDate === todayStr) {
         const todayVisit = state.visits.find(v =>
           v.clientId === client.id && v.date === todayStr && branchScheduleIds.has(v.scheduleEntryId)
         );
@@ -189,7 +192,7 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
       }
 
       // 6. Первая тренировка завтра
-      if (catMap['first_tomorrow']?.enabled && firstDate === tomorrowStr) {
+      if (!isLoyalWithoutVisits && catMap['first_tomorrow']?.enabled && firstDate === tomorrowStr) {
         const tomorrowVisit = state.visits.find(v =>
           v.clientId === client.id && v.date === tomorrowStr && branchScheduleIds.has(v.scheduleEntryId)
         );
@@ -207,7 +210,7 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
       }
 
       // 7. Вчера не пришёл на первую
-      if (catMap['missed_first']?.enabled && firstDate === yesterdayStr) {
+      if (!isLoyalWithoutVisits && catMap['missed_first']?.enabled && firstDate === yesterdayStr) {
         const yesterdayVisit = state.visits.find(v =>
           v.clientId === client.id && v.date === yesterdayStr && branchScheduleIds.has(v.scheduleEntryId)
         );
@@ -227,7 +230,7 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
       }
 
       // 9. Новичок отменил первую и перезаписался на другую
-      if (catMap['newcomer_rescheduled']?.enabled) {
+      if (!isLoyalWithoutVisits && catMap['newcomer_rescheduled']?.enabled) {
         const allSubs = state.sales.filter(s => s.clientId === client.id && s.type === 'subscription');
         if (allSubs.length === 0) {
           // Есть отменённая запись на первую тренировку
@@ -259,7 +262,7 @@ export default function Notifications({ store, onSell }: NotificationsProps & { 
       }
 
       // 8. Пришёл вчера первый раз, нет абонемента
-      if (catMap['no_sub_after_first']?.enabled && firstDate === yesterdayStr) {
+      if (!isLoyalWithoutVisits && catMap['no_sub_after_first']?.enabled && firstDate === yesterdayStr) {
         const yesterdayVisit = state.visits.find(v =>
           v.clientId === client.id && v.date === yesterdayStr && branchScheduleIds.has(v.scheduleEntryId)
         );
