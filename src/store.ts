@@ -2410,16 +2410,10 @@ const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE
 async function saveStateToDb(s: AppState): Promise<boolean> {
   if (!CRM_STATE_URL) return true;
   try {
-    // Исключаем импортированных клиентов (dashboardExclude) из сохранения в БД —
-    // они переимпортируются автоматически при загрузке и экономят место
-    const stateForDb: AppState = {
-      ...s,
-      clients: s.clients.filter(c => !c.dashboardExclude),
-    };
     const res = await fetch(`${CRM_STATE_URL}?action=state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: stateForDb }),
+      body: JSON.stringify({ data: s }),
     });
     return res.ok;
   } catch { return false; }
@@ -2540,9 +2534,8 @@ export function useStore() {
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
 
         // Мёрджим записи которые могут быть в localStorage но ещё не в БД
-        // Импортированных клиентов (dashboardExclude) не берём — они переимпортируются автоматически
         const dbClientIds = new Set((dbState.clients || []).map((c: Client) => c.id));
-        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id) && !c.dashboardExclude);
+        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id));
         const dbExpenseIds = new Set((dbState.expenses || []).map((e: Expense) => e.id));
         const extraExpenses = (localState.expenses || []).filter(e => !dbExpenseIds.has(e.id));
         const dbCashOpIds = new Set((dbState.cashOperations || []).map((o: CashOperation) => o.id));
