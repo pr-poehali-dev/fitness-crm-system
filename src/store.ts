@@ -2410,10 +2410,16 @@ const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE
 async function saveStateToDb(s: AppState) {
   if (!CRM_STATE_URL) return;
   try {
+    // Исключаем импортированных клиентов (dashboardExclude) из сохранения в БД —
+    // они переимпортируются автоматически при загрузке и экономят место
+    const stateForDb: AppState = {
+      ...s,
+      clients: s.clients.filter(c => !c.dashboardExclude),
+    };
     await fetch(`${CRM_STATE_URL}?action=state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: s }),
+      body: JSON.stringify({ data: stateForDb }),
     });
   } catch { /* ignore */ }
 }
@@ -2449,7 +2455,15 @@ export async function regenerateAccessToken(): Promise<string> {
 }
 
 function saveState(s: AppState) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch (e) {
+    // localStorage переполнен — сохраняем без импортированных клиентов
+    try {
+      const slim = { ...s, clients: s.clients.filter(c => !c.dashboardExclude) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+    } catch { /* ignore */ }
+  }
   saveStateToDb(s);
 }
 

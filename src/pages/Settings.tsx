@@ -1559,25 +1559,28 @@ export default function Settings({ store }: SettingsProps) {
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-2">
                 <Label className="text-xs text-muted-foreground">Направления</Label>
-                <button
-                  type="button"
-                  onClick={() => setSingleForm(f => ({ ...f, trainingTypeIds: [] }))}
-                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.length === 0 ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary text-muted-foreground'}`}
-                >
-                  Все направления
+                <button type="button" onClick={() => setSingleForm(f => ({ ...f, trainingTypeIds: [] }))}
+                  className={`text-xs px-3 py-1 rounded-full border font-medium transition-colors ${singleForm.trainingTypeIds.length === 0 ? 'bg-emerald-500 text-white border-emerald-500' : 'border-border hover:bg-secondary'}`}>
+                  {singleForm.trainingTypeIds.length === 0 ? '✓ Все направления' : 'Выбрать все'}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {state.trainingTypes.map(tt => (
-                  <button key={tt.id}
-                    onClick={() => toggleTT(singleForm.trainingTypeIds, tt.id, ids => setSingleForm(f => ({ ...f, trainingTypeIds: ids })))}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.length === 0 ? 'opacity-40 border-border' : singleForm.trainingTypeIds.includes(tt.id) ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
-                    {tt.name}
-                  </button>
-                ))}
-              </div>
+              {singleForm.trainingTypeIds.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {state.trainingTypes.map(tt => (
+                    <button key={tt.id}
+                      onClick={() => toggleTT(singleForm.trainingTypeIds, tt.id, ids => setSingleForm(f => ({ ...f, trainingTypeIds: ids })))}
+                      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.includes(tt.id) ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
+                      {tt.name}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  Доступны все существующие и будущие направления
+                </div>
+              )}
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30">
               <input type="checkbox" id="noExtraCharge" checked={singleForm.noExtraCharge}
