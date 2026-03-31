@@ -2518,6 +2518,7 @@ export function useStore() {
     loadStateFromDb().then(dbState => {
       // Проверяем что из БД пришёл реальный state (есть массив staff), а не мусор
       const isValidState = dbState && Array.isArray(dbState.staff) && dbState.staff.length > 0;
+      console.log('[CRM] DB load:', { isValidState, sales: dbState?.sales?.length ?? 0, subs: dbState?.subscriptions?.length ?? 0, clients: dbState?.clients?.length ?? 0 });
       if (isValidState && dbState) {
         // Переносим пароли/логины из localStaff в dbStaff
         const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
@@ -2559,8 +2560,9 @@ export function useStore() {
           merged = applyBorImport(merged);
           merged.importedBorV1 = true;
         }
+        console.log('[CRM] Merged:', { sales: merged.sales?.length ?? 0, subs: merged.subscriptions?.length ?? 0, clients: merged.clients?.length ?? 0 });
         setState(merged);
-        saveState(merged);
+        saveState(merged, (ok) => console.log('[CRM] Save after merge:', ok));
       }
       setDbLoaded(true);
     });
@@ -2697,7 +2699,7 @@ export function useStore() {
       freezeDaysLeft: plan.freezeDays,
       frozenFrom: null, frozenTo: null,
       status: activationDate ? 'active' : hasPendingMode ? 'pending' : 'active',
-      price: plan.price, discount, paymentMethod, branchId: plan.branchId,
+      price: plan.price, discount, paymentMethod, branchId: state.currentBranchId || plan.branchId,
       activatedAt: activationDate ?? (hasPendingMode ? null : saleDate),
       autoActivateDate,
     };
@@ -2708,7 +2710,7 @@ export function useStore() {
     const newSale: Sale = {
       id: saleId, clientId, type: 'subscription', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
-      date: saleDate, branchId: plan.branchId,
+      date: saleDate, branchId: state.currentBranchId || plan.branchId,
       isFirstSubscription: isFirst, isReturn, isRenewal,
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,
@@ -2741,7 +2743,7 @@ export function useStore() {
     const newSale: Sale = {
       id: saleId, clientId, type: 'single', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
-      date: saleDate, branchId: plan.branchId,
+      date: saleDate, branchId: state.currentBranchId || plan.branchId,
       isFirstSubscription: false, isReturn: false, isRenewal: false,
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,
