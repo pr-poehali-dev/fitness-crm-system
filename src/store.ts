@@ -534,6 +534,7 @@ export interface AppState {
   importedBorV1?: boolean;
   importedBorV2?: boolean;
   importedTsentrV1?: boolean;
+  importedOlimpV1?: boolean;
   projectCode: string;
   cashOperations: CashOperation[];
   shifts: Shift[];
@@ -610,6 +611,7 @@ function mapAdSource(cat: string): string {
   if (c.includes('промокод') || c.includes('блогер') || c.includes('сертификат') || c.includes('мероприятия')) return 'Блогер';
   if (c.includes('виджет') || c.includes('самостоятельная') || c.includes('яндекс')) return 'Яндекс';
   if (c.includes('рассылка') || c.includes('приветственное') || c.includes('таргет на почту')) return 'Таргет VK';
+  if (c.includes('по рекомендации')) return 'Сарафанное радио';
   return '';
 }
 
@@ -2515,6 +2517,8 @@ export function useStore() {
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
 
         // Мёрджим записи которые могут быть в localStorage но ещё не в БД
+        const dbClientIds = new Set((dbState.clients || []).map((c: Client) => c.id));
+        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id));
         const dbExpenseIds = new Set((dbState.expenses || []).map((e: Expense) => e.id));
         const extraExpenses = (localState.expenses || []).filter(e => !dbExpenseIds.has(e.id));
         const dbCashOpIds = new Set((dbState.cashOperations || []).map((o: CashOperation) => o.id));
@@ -2525,6 +2529,7 @@ export function useStore() {
         let merged: AppState = {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+          clients: extraClients.length > 0 ? [...(dbState.clients || []), ...extraClients] : (dbState.clients || []),
           expenses: extraExpenses.length > 0 ? [...(dbState.expenses || []), ...extraExpenses] : (dbState.expenses || []),
           cashOperations: extraCashOps.length > 0 ? [...(dbState.cashOperations || []), ...extraCashOps] : (dbState.cashOperations || []),
           sales: extraSales.length > 0 ? [...(dbState.sales || []), ...extraSales] : (dbState.sales || []),
@@ -2543,6 +2548,75 @@ export function useStore() {
       setDbLoaded(true);
     });
   }, []);
+
+  // Импорт базы клиентов Олимпийский (однократно, после загрузки из БД)
+  useEffect(() => {
+    if (!dbLoaded) return;
+    if (state.importedOlimpV1) return;
+
+    const FETCH_OLIMP_URL = 'https://functions.poehali.dev/e5bb11ad-c525-44f8-9cc7-a8989208fc4a';
+    let cancelled = false;
+
+    const run = async () => {
+      const allRows: (string | number)[][] = [];
+      let offset = 0;
+      const step = 400;
+      while (!cancelled) {
+        const res = await fetch(`${FETCH_OLIMP_URL}?offset=${offset}&limit=${step}`);
+        const data = await res.json();
+        const rows: (string | number)[][] = data.rows || [];
+        allRows.push(...rows);
+        if (rows.length < step) break;
+        offset += step;
+      }
+      if (cancelled) return;
+
+      setState(cur => {
+        if (cur.importedOlimpV1) return cur;
+        const olimpBranchId = cur.branches.find(b => b.name.toLowerCase().includes('олим'))?.id || 'brx6mfnc';
+        const seen = new Set(cur.clients.map(c => c.phone.replace(/\D/g, '')));
+        const newClients: Client[] = [];
+        let idx = 0;
+        for (const row of allRows) {
+          const [nameRaw, phone, catRaw, bdate, spent, lastVisit, comment] = row;
+          const phoneClean = String(phone).replace(/\D/g, '');
+          if (!phoneClean || phoneClean.length < 7) continue;
+          if (seen.has(phoneClean)) continue;
+          seen.add(phoneClean);
+          const nameCleaned = String(nameRaw)
+            .replace(/^"+|"+$/g, '')
+            .replace(/\s+(wa|wа|ВК|вк|WA)$/i, '')
+            .replace(/,.*$/, '')
+            .trim();
+          const { firstName, lastName, middleName } = parseName(nameCleaned, '');
+          if (!firstName && !lastName) continue;
+          newClients.push({
+            id: `olimp_${Date.now()}_${idx++}`,
+            firstName, lastName, middleName,
+            phone: phoneClean,
+            contactChannel: 'phone',
+            referralSource: '',
+            adSource: mapAdSource(String(catRaw || '')),
+            birthDate: String(bdate || ''),
+            comment: String(comment || ''),
+            branchId: olimpBranchId,
+            createdAt: '2026-01-01',
+            activeSubscriptionId: null,
+            importedSpent: Number(spent) || 0,
+            dashboardExclude: true,
+            lastVisitDate: String(lastVisit || ''),
+            importedStatus: parseImportedStatus(String(lastVisit || '')),
+          });
+        }
+        const next: AppState = { ...cur, clients: [...cur.clients, ...newClients], importedOlimpV1: true };
+        saveState(next);
+        return next;
+      });
+    };
+
+    run().catch(() => {});
+    return () => { cancelled = true; };
+  }, [dbLoaded, state.importedOlimpV1]);
 
   const update = useCallback((updater: (s: AppState) => AppState) => {
     setState(prev => {
