@@ -2810,7 +2810,7 @@ export function useStore() {
       freezeDaysLeft: plan.freezeDays,
       frozenFrom: null, frozenTo: null,
       status: activationDate ? 'active' : hasPendingMode ? 'pending' : 'active',
-      price: plan.price, discount, paymentMethod, branchId: state.currentBranchId || plan.branchId,
+      price: plan.price, discount, paymentMethod, branchId: state.currentBranchId,
       activatedAt: activationDate ?? (hasPendingMode ? null : saleDate),
       autoActivateDate,
     };
@@ -2821,7 +2821,7 @@ export function useStore() {
     const newSale: Sale = {
       id: saleId, clientId, type: 'subscription', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
-      date: saleDate, branchId: state.currentBranchId || plan.branchId,
+      date: saleDate, branchId: state.currentBranchId,
       isFirstSubscription: isFirst, isReturn, isRenewal,
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,
@@ -2854,7 +2854,7 @@ export function useStore() {
     const newSale: Sale = {
       id: saleId, clientId, type: 'single', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
-      date: saleDate, branchId: state.currentBranchId || plan.branchId,
+      date: saleDate, branchId: state.currentBranchId,
       isFirstSubscription: false, isReturn: false, isRenewal: false,
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,

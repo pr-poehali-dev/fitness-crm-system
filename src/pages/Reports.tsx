@@ -311,8 +311,8 @@ export default function Reports({ store }: ReportsProps) {
 
   const exportSales = () => {
     const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
-    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
-    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+    const subPlans = state.subscriptionPlans;
+    const addPlans = state.singleVisitPlans;
     const inM = (date: string, month: string) => {
       const [y, mo] = month.split('-').map(Number);
       const d = new Date(date);
@@ -457,8 +457,8 @@ export default function Reports({ store }: ReportsProps) {
     sep(); sep();
 
     // === ПРОДАЖИ — АБОНЕМЕНТЫ ===
-    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
-    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+    const subPlans = state.subscriptionPlans;
+    const addPlans = state.singleVisitPlans;
     allRows.push([`=== ПРОДАЖИ — АБОНЕМЕНТЫ (${selectedYear}, ${branchLabel}) ===`]);
     allRows.push(['Месяц', ...subPlans.map(p => p.name + ' (кол-во)'), ...subPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма']);
     months.forEach((month, i) => {
@@ -508,8 +508,8 @@ export default function Reports({ store }: ReportsProps) {
       return d.getFullYear() === y && d.getMonth() + 1 === mo;
     };
     const branchCats = state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId));
-    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
-    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+    const subPlans = state.subscriptionPlans;
+    const addPlans = state.singleVisitPlans;
 
     const sections: { title: string; rows: string[][] }[] = [];
 
@@ -986,8 +986,8 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
     return d.getFullYear() === y && d.getMonth() + 1 === mo;
   };
 
-  const subItems = useMemo(() => state.subscriptionPlans.filter(p => bf(p.branchId)), [state.subscriptionPlans, filterBranchIds]);
-  const addItems = useMemo(() => state.singleVisitPlans.filter(p => bf(p.branchId)), [state.singleVisitPlans, filterBranchIds]);
+  const subItems = useMemo(() => state.subscriptionPlans, [state.subscriptionPlans]);
+  const addItems = useMemo(() => state.singleVisitPlans, [state.singleVisitPlans]);
   // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.)
   const extraItems = useMemo(() => state.trainingTypes.filter(tt =>
     tt.extraPrice && tt.extraPrice > 0 && (filterBranchIds.length === 0 || tt.branchIds.some(b => filterBranchIds.includes(b)))
