@@ -2929,6 +2929,15 @@ export function useStore() {
   const markVisit = (visitId: string, status: 'attended' | 'missed' | 'cancelled', subscriptionId: string | null, isSingleVisit: boolean, singlePrice: number, singlePlanId?: string | null) => {
     update(s => {
       let newSubs = s.subscriptions;
+      let newSchedule = s.schedule;
+      const visit = s.visits.find(v => v.id === visitId);
+      if (status === 'cancelled' && visit) {
+        newSchedule = s.schedule.map(entry =>
+          entry.id === visit.scheduleEntryId
+            ? { ...entry, enrolledClientIds: entry.enrolledClientIds.filter(id => id !== visit.clientId) }
+            : entry
+        );
+      }
       if (status === 'attended' && subscriptionId) {
         newSubs = s.subscriptions.map(sub => {
           if (sub.id !== subscriptionId) return sub;
@@ -2949,6 +2958,7 @@ export function useStore() {
       return {
         ...s,
         visits: s.visits.map(v => v.id === visitId ? { ...v, status, subscriptionId, isSingleVisit, singlePlanId: isSingleVisit ? (singlePlanId ?? null) : null, price: isSingleVisit ? singlePrice : 0 } : v),
+        schedule: newSchedule,
         subscriptions: newSubs
       };
     });
