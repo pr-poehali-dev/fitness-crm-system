@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StoreType, Client } from '@/store';
+import { useState, useRef, useEffect } from 'react';
+import { StoreType, Client, ClientCategory } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -39,6 +39,21 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
     referralSource: client.referralSource, adSource: client.adSource,
     birthDate: client.birthDate, comment: client.comment,
   });
+
+  const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
+  const canEditStatus = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+        setShowStatusMenu(false);
+      }
+    };
+    if (showStatusMenu) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showStatusMenu]);
 
   const cat = getClientCategory(client);
   const sub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
@@ -115,7 +130,53 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
             <span>{client.phone}</span>
           </div>
           <div className="flex items-center gap-2 mt-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full ${badgeClass}`}>{catLabel}</span>
+            {canEditStatus ? (
+              <div className="relative" ref={statusMenuRef}>
+                <button
+                  onClick={() => setShowStatusMenu(v => !v)}
+                  className={`text-xs px-2 py-0.5 rounded-full ${badgeClass} flex items-center gap-1 hover:opacity-80 transition-opacity`}
+                >
+                  {catLabel}
+                  <Icon name="ChevronDown" size={10} />
+                </button>
+                {showStatusMenu && (
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
+                    {([
+                      { value: 'new', label: 'Новичок', cls: 'badge-new' },
+                      { value: 'loyal', label: 'Лояльный', cls: 'badge-loyal' },
+                      { value: 'sleeping', label: 'Уснувший', cls: 'badge-sleeping' },
+                      { value: 'lost', label: 'Потерянный', cls: 'badge-lost' },
+                    ] as { value: ClientCategory; label: string; cls: string }[]).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          updateClient(client.id, { manualStatus: opt.value });
+                          setShowStatusMenu(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 ${cat === opt.value ? 'font-semibold' : ''}`}
+                      >
+                        <span className={`inline-block w-2 h-2 rounded-full ${opt.cls}`} />
+                        {opt.label}
+                        {cat === opt.value && <Icon name="Check" size={10} className="ml-auto" />}
+                      </button>
+                    ))}
+                    {client.manualStatus && (
+                      <button
+                        onClick={() => {
+                          updateClient(client.id, { manualStatus: undefined });
+                          setShowStatusMenu(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted border-t border-border mt-1 pt-1"
+                      >
+                        Сбросить (авто)
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${badgeClass}`}>{catLabel}</span>
+            )}
             {branch && <span className="text-xs text-muted-foreground">{branch.name}</span>}
             {client.fromBranchId && <span className="text-xs text-amber-600">другой филиал</span>}
           </div>

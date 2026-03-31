@@ -109,6 +109,7 @@ export interface Client {
   dashboardExclude?: boolean;
   lastVisitDate?: string;
   importedStatus?: ClientCategory;
+  manualStatus?: ClientCategory;
 }
 
 export interface ScheduleEntry {
@@ -3246,6 +3247,7 @@ export function useStore() {
 
   // Helpers
   const getClientCategory = (client: Client): ClientCategory => {
+    if (client.manualStatus) return client.manualStatus;
     if (client.importedStatus && !client.activeSubscriptionId && !state.sales.some(s => s.clientId === client.id && s.type === 'subscription')) {
       return client.importedStatus;
     }
