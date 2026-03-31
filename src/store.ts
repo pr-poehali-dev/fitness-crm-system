@@ -2583,64 +2583,69 @@ export function useStore() {
   const [dbLoaded, setDbLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
-  // При первом запуске — пробуем загрузить из БД (приоритет над localStorage)
+  // При первом запуске — загружаем из БД (с ретраями, приоритет над localStorage)
   useEffect(() => {
     if (dbLoaded) return;
-    // Запоминаем локальный state ДО загрузки БД
     const localState = loadState();
     const localStaff = localState.staff;
-    loadStateFromDb().then(dbState => {
-      // Проверяем что из БД пришёл реальный state (есть массив staff), а не мусор
-      const isValidState = dbState && Array.isArray(dbState.staff) && dbState.staff.length > 0;
-      if (isValidState && dbState) {
-        // Переносим пароли/логины из localStaff в dbStaff
-        const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
-        const mergedStaff = dbState.staff.map((s: StaffMember) => {
-          const local = localStaffMap.get(s.id);
-          if (!local) return s;
-          return { ...s, password: s.password || local.password, login: s.login || local.login };
-        });
-        const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
-        const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
 
-        // Мёрджим ВСЕ коллекции: берём из БД как основу, добавляем из localStorage то чего нет в БД
-        const mergeById = <T extends { id: string }>(dbItems: T[], localItems: T[]) => {
-          const dbIds = new Set(dbItems.map(i => i.id));
-          const extra = localItems.filter(i => !dbIds.has(i.id));
-          return extra.length > 0 ? [...dbItems, ...extra] : dbItems;
-        };
-        // Объединяем списки удалённых клиентов из обоих источников
-        const mergedDeletedIds = Array.from(new Set([
-          ...(localState.deletedClientIds || []),
-          ...(dbState.deletedClientIds || []),
-        ]));
+    const applyDbState = (dbState: AppState) => {
+      const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
+      const mergedStaff = dbState.staff.map((s: StaffMember) => {
+        const local = localStaffMap.get(s.id);
+        if (!local) return s;
+        return { ...s, password: s.password || local.password, login: s.login || local.login };
+      });
+      const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
+      const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
+      const mergeById = <T extends { id: string }>(dbItems: T[], localItems: T[]) => {
+        const dbIds = new Set(dbItems.map(i => i.id));
+        const extra = localItems.filter(i => !dbIds.has(i.id));
+        return extra.length > 0 ? [...dbItems, ...extra] : dbItems;
+      };
+      const mergedDeletedIds = Array.from(new Set([
+        ...(localState.deletedClientIds || []),
+        ...(dbState.deletedClientIds || []),
+      ]));
+      let merged: AppState = {
+        ...dbState,
+        staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+        clients: mergeById(dbState.clients || [], localState.clients || []).filter((c: Client) => !mergedDeletedIds.includes(c.id)),
+        sales: mergeById(dbState.sales || [], localState.sales || []),
+        subscriptions: mergeById(dbState.subscriptions || [], localState.subscriptions || []),
+        schedule: mergeById(dbState.schedule || [], localState.schedule || []),
+        visits: mergeById(dbState.visits || [], localState.visits || []),
+        expenses: mergeById(dbState.expenses || [], localState.expenses || []),
+        cashOperations: mergeById(dbState.cashOperations || [], localState.cashOperations || []),
+        shifts: mergeById(dbState.shifts || [], localState.shifts || []),
+        bonusTransactions: mergeById(dbState.bonusTransactions || [], localState.bonusTransactions || []),
+        bonusSettings: dbState.bonusSettings || localState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
+        deletedClientIds: mergedDeletedIds,
+      };
+      if (!merged.importedBorV1) { merged = applyBorImport(merged); merged.importedBorV1 = true; }
+      setState(merged);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+    };
 
-        let merged: AppState = {
-          ...dbState,
-          staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-          clients: mergeById(dbState.clients || [], localState.clients || []).filter((c: Client) => !mergedDeletedIds.includes(c.id)),
-          sales: mergeById(dbState.sales || [], localState.sales || []),
-          subscriptions: mergeById(dbState.subscriptions || [], localState.subscriptions || []),
-          schedule: mergeById(dbState.schedule || [], localState.schedule || []),
-          visits: mergeById(dbState.visits || [], localState.visits || []),
-          expenses: mergeById(dbState.expenses || [], localState.expenses || []),
-          cashOperations: mergeById(dbState.cashOperations || [], localState.cashOperations || []),
-          shifts: mergeById(dbState.shifts || [], localState.shifts || []),
-          bonusTransactions: mergeById(dbState.bonusTransactions || [], localState.bonusTransactions || []),
-          bonusSettings: dbState.bonusSettings || localState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
-          deletedClientIds: mergedDeletedIds,
-        };
-        // Применяем импорт Бор если ещё не применён
-        if (!merged.importedBorV1) {
-          merged = applyBorImport(merged);
-          merged.importedBorV1 = true;
-        }
-        setState(merged);
-        // Сохраняем в localStorage чтобы следующий запуск был быстрее
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+    // Пробуем загрузить с ретраями (до 5 попыток с задержкой)
+    const tryLoad = async (attempt = 0): Promise<void> => {
+      const dbState = await loadStateFromDb();
+      const isValid = dbState && Array.isArray(dbState.staff) && dbState.staff.length > 0;
+      if (isValid && dbState) {
+        applyDbState(dbState);
+        setDbLoaded(true);
+        return;
       }
-      setDbLoaded(true);
-    });
+      if (attempt < 4) {
+        // Повторяем через нарастающую задержку: 2s, 4s, 6s, 8s
+        setTimeout(() => tryLoad(attempt + 1), 2000 * (attempt + 1));
+      } else {
+        // Все попытки исчерпаны — показываем то что есть в localStorage
+        setDbLoaded(true);
+      }
+    };
+
+    tryLoad();
   }, []);
 
   // Периодическое обновление данных с сервера (polling каждые 30 сек)

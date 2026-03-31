@@ -102,9 +102,16 @@ export default function App() {
   if (!store.dbLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto" />
-          <div className="text-sm text-muted-foreground">Загрузка данных...</div>
+        <div className="text-center space-y-4">
+          <div className="w-10 h-10 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="text-base font-medium">Загрузка данных...</div>
+          <div className="text-sm text-muted-foreground">Подключение к серверу</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            Обновить страницу
+          </button>
         </div>
       </div>
     );
